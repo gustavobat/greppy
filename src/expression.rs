@@ -7,23 +7,6 @@ pub enum Token {
     Char(char),
 }
 
-impl Token {
-    pub fn feed_len(&self) -> usize {
-        match self {
-            Token::Char(_) => 1,
-        }
-    }
-
-    pub fn validate(&self, input: &str) -> bool {
-        if input.len() < self.feed_len() {
-            return false;
-        }
-        match self {
-            Token::Char(expected) => input.chars().next().unwrap() == *expected,
-        }
-    }
-}
-
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Expression {
     pub tokens: Vec<Token>,
@@ -32,10 +15,6 @@ pub struct Expression {
 impl Expression {
     pub fn push(&mut self, token: Token) {
         self.tokens.push(token);
-    }
-
-    pub fn feed_len(&self) -> usize {
-        self.tokens.iter().map(Token::feed_len).sum()
     }
 }
 

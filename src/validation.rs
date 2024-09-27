@@ -1,13 +1,26 @@
-use crate::expression::Expression;
+use crate::expression::{Expression, Token};
 
-pub fn validate_input(input: &str, expression: &Expression) -> bool {
-    let feed_len = expression.feed_len();
-    for i in 0..input.len() - feed_len + 1 {
-        if validate_substring(&input[i..i + feed_len], expression) {
-            return true;
+pub trait Validation {
+    fn feed_len(&self) -> usize;
+
+    fn validate(&self, input: &str) -> bool;
+}
+
+impl Validation for Token {
+    fn feed_len(&self) -> usize {
+        match self {
+            Token::Char(_) => 1,
         }
     }
-    false
+
+    fn validate(&self, input: &str) -> bool {
+        if input.len() < self.feed_len() {
+            return false;
+        }
+        match self {
+            Token::Char(expected) => input.chars().next().unwrap() == *expected,
+        }
+    }
 }
 
 fn validate_substring(input: &str, expression: &Expression) -> bool {
@@ -21,6 +34,22 @@ fn validate_substring(input: &str, expression: &Expression) -> bool {
     true
 }
 
+impl Validation for Expression {
+    fn feed_len(&self) -> usize {
+        self.tokens.iter().map(Token::feed_len).sum()
+    }
+
+    fn validate(&self, input: &str) -> bool {
+        let feed_len = self.feed_len();
+        for i in 0..input.len() - feed_len + 1 {
+            if validate_substring(&input[i..i + feed_len], self) {
+                return true;
+            }
+        }
+        false
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -29,9 +58,9 @@ mod tests {
     #[test]
     fn test_validate_input() {
         let expression = Expression::from_str("abc").unwrap();
-        assert!(validate_input("abc", &expression));
-        assert!(validate_input("abcabc", &expression));
-        assert!(validate_input("abca", &expression));
-        assert!(!validate_input("aba", &expression));
+        assert!(expression.validate("abc"));
+        assert!(expression.validate("abcabc"));
+        assert!(expression.validate("abca"));
+        assert!(!expression.validate("aba"));
     }
 }

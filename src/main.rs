@@ -4,7 +4,7 @@ use std::process;
 use std::str::FromStr;
 
 use codecrafters_grep::expression::Expression;
-use codecrafters_grep::validation::validate_input;
+use codecrafters_grep::validation::Validation;
 
 // Usage: echo <input_text> | your_program.sh -E <pattern>
 fn main() {
@@ -22,7 +22,7 @@ fn main() {
     let mut input_line = String::new();
     io::stdin().read_line(&mut input_line).unwrap();
 
-    if validate_input(&input_line, &expression) {
+    if expression.validate(&input_line) {
         process::exit(0)
     } else {
         process::exit(1)
