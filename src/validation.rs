@@ -1,4 +1,5 @@
-use crate::expression::{Expression, Token};
+use crate::expression::Expression;
+use crate::expression::Token;
 
 pub trait Validation {
     fn feed_len(&self) -> usize;
@@ -9,7 +10,8 @@ pub trait Validation {
 impl Validation for Token {
     fn feed_len(&self) -> usize {
         match self {
-            Token::Char(_) => 1,
+            Token::Tag(s) => s.len(),
+            Token::Digit => 1,
         }
     }
 
@@ -18,7 +20,8 @@ impl Validation for Token {
             return false;
         }
         match self {
-            Token::Char(expected) => input.chars().next().unwrap() == *expected,
+            Token::Tag(s) => input[..s.len()] == *s,
+            Token::Digit => input.chars().next().unwrap().is_ascii_digit(),
         }
     }
 }
