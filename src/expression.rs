@@ -10,6 +10,7 @@ use nom::IResult;
 pub enum Token {
     Tag(String),
     Digit,
+    AlphaNumeric,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -28,6 +29,11 @@ fn parse_digit(input: &str) -> IResult<&str, Token> {
     Ok((input, Token::Digit))
 }
 
+fn parse_alphanumeric(input: &str) -> IResult<&str, Token> {
+    let (input, _) = tag("\\w")(input)?;
+    Ok((input, Token::AlphaNumeric))
+}
+
 fn parse_tag(input: &str) -> IResult<&str, Token> {
     let (input, tag) = many1(nom::branch::alt((
         nom::character::complete::alphanumeric1,
@@ -40,8 +46,12 @@ fn parse_expression(input: &str) -> Result<Expression, ExpressionError> {
     if input.is_empty() {
         return Err(ExpressionError::EmptyExpression);
     }
-    let (rest, patterns) = many1(nom::branch::alt((parse_tag, parse_digit)))(input)
-        .map_err(|_| ExpressionError::Unsupported(input.to_owned()))?;
+    let (rest, patterns) = many1(nom::branch::alt((
+        parse_digit,
+        parse_alphanumeric,
+        parse_tag,
+    )))(input)
+    .map_err(|_| ExpressionError::Unsupported(input.to_owned()))?;
     if !rest.is_empty() {
         return Err(ExpressionError::Unsupported(rest.to_owned()));
     }
@@ -64,7 +74,9 @@ mod tests {
 
     #[test_case("a", vec![Token::Tag("a".to_owned())]; "single char")]
     #[test_case("ab", vec![Token::Tag("ab".to_owned())]; "multiple chars")]
-    #[test_case("12", vec![Token::Digit, Token::Digit]; "multiple digits")]
+    #[test_case("12", vec![Token::Tag("12".to_owned())]; "numeric tag")]
+    #[test_case("\\d", vec![Token::Digit]; "digit token")]
+    #[test_case("\\w", vec![Token::AlphaNumeric]; "alphanumeric token")]
     fn test_expression(input: &str, expected_tokens: Vec<Token>) {
         let result = Expression::from_str(input).unwrap();
         assert_eq!(result.tokens, expected_tokens);
