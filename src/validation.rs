@@ -3,14 +3,14 @@ use crate::expression::Expression;
 pub fn validate_input(input: &str, expression: &Expression) -> bool {
     let feed_len = expression.feed_len();
     for i in 0..input.len() - feed_len + 1 {
-        if validate_chunk(&input[i..i + feed_len], expression) {
+        if validate_substring(&input[i..i + feed_len], expression) {
             return true;
         }
     }
     false
 }
 
-fn validate_chunk(input: &str, expression: &Expression) -> bool {
+fn validate_substring(input: &str, expression: &Expression) -> bool {
     let mut current_input = input;
     for token in &expression.tokens {
         if !token.validate(current_input) {
