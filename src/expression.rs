@@ -14,7 +14,8 @@ pub enum Token {
     Tag(String),
     Digit,
     AlphaNumeric,
-    CharGroup(HashSet<char>),
+    PosCharGroup(HashSet<char>),
+    NegCharGroup(HashSet<char>),
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -40,7 +41,10 @@ fn parse_alphanumeric(input: &str) -> IResult<&str, Token> {
 
 fn parse_char_group(input: &str) -> IResult<&str, Token> {
     let (input, (_, chars, _)) = tuple((tag("["), take_until("]"), tag("]")))(input)?;
-    Ok((input, Token::CharGroup(chars.chars().collect())))
+    if let Some(chars) = chars.strip_prefix("^") {
+        return Ok((input, Token::NegCharGroup(chars.chars().collect())));
+    }
+    Ok((input, Token::PosCharGroup(chars.chars().collect())))
 }
 
 fn parse_tag(input: &str) -> IResult<&str, Token> {
@@ -87,7 +91,8 @@ mod tests {
     #[test_case("12", vec![Token::Tag("12".to_owned())]; "numeric tag")]
     #[test_case("\\d", vec![Token::Digit]; "digit token")]
     #[test_case("\\w", vec![Token::AlphaNumeric]; "alphanumeric token")]
-    #[test_case("[ab]", vec![Token::CharGroup(HashSet::from(['a', 'b']))]; "positive char group")]
+    #[test_case("[ab]", vec![Token::PosCharGroup(HashSet::from(['a', 'b']))]; "positive char group")]
+    #[test_case("[^ab]", vec![Token::NegCharGroup(HashSet::from(['a', 'b']))]; "negative char group")]
     fn test_expression(input: &str, expected_tokens: Vec<Token>) {
         let result = Expression::from_str(input).unwrap();
         assert_eq!(result.tokens, expected_tokens);
