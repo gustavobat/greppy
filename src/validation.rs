@@ -13,6 +13,7 @@ impl Validation for Token {
             Token::Tag(s) => s.len(),
             Token::Digit => 1,
             Token::AlphaNumeric => 1,
+            Token::CharGroup(_) => 1,
         }
     }
 
@@ -24,6 +25,7 @@ impl Validation for Token {
             Token::Tag(s) => input[..s.len()] == *s,
             Token::Digit => input.chars().next().unwrap().is_ascii_digit(),
             Token::AlphaNumeric => input.chars().next().unwrap().is_alphanumeric(),
+            Token::CharGroup(group) => group.contains(&input.chars().next().unwrap()),
         }
     }
 }
@@ -94,5 +96,19 @@ mod tests {
         assert!(expression.validate("a"));
         assert!(!expression.validate(""));
         assert!(!expression.validate("$!"));
+    }
+
+    #[test]
+    fn test_positive_char_group() {
+        let expression = Expression::from_str("[abc]").unwrap();
+        assert!(expression.validate("a"));
+        assert!(expression.validate("b"));
+        assert!(expression.validate("c"));
+        assert!(expression.validate("ab"));
+        assert!(expression.validate("da"));
+        assert!(!expression.validate(""));
+        assert!(!expression.validate(" "));
+        assert!(!expression.validate("$![]"));
+        assert!(!expression.validate("1"));
     }
 }
