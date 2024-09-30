@@ -53,7 +53,17 @@ impl Validation for Expression {
         if input.len() < feed_len {
             return false;
         };
-        for i in 0..input.len() - feed_len + 1 {
+
+        if self.start_anchor {
+            return validate_substring(&input[..feed_len], self);
+        }
+
+        let last_start = input.len() - feed_len;
+        if self.end_anchor {
+            return validate_substring(&input[last_start..], self);
+        }
+
+        for i in 0..=last_start {
             if validate_substring(&input[i..i + feed_len], self) {
                 return true;
             }
@@ -127,5 +137,23 @@ mod tests {
         assert!(expression.validate(" "));
         assert!(expression.validate("$![]"));
         assert!(expression.validate("1"));
+    }
+
+    #[test]
+    fn test_start_anchor() {
+        let expression = Expression::from_str("^abc").unwrap();
+        assert!(expression.validate("abc"));
+        assert!(expression.validate("abcc"));
+        assert!(!expression.validate("aabc"));
+        assert!(!expression.validate("^abc"));
+    }
+
+    #[test]
+    fn test_end_anchor() {
+        let expression = Expression::from_str("abc$").unwrap();
+        assert!(expression.validate("abc"));
+        assert!(expression.validate("aabc"));
+        assert!(!expression.validate("abcc"));
+        assert!(!expression.validate("abc$"));
     }
 }

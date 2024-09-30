@@ -3,6 +3,7 @@ use std::str::FromStr;
 
 use crate::error::ExpressionError;
 
+use nom::branch::alt;
 use nom::bytes::complete::tag;
 use nom::bytes::complete::take_until;
 use nom::multi::many1;
@@ -21,12 +22,8 @@ pub enum Token {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Expression {
     pub tokens: Vec<Token>,
-}
-
-impl Expression {
-    pub fn push(&mut self, token: Token) {
-        self.tokens.push(token);
-    }
+    pub start_anchor: bool,
+    pub end_anchor: bool,
 }
 
 fn parse_digit(input: &str) -> IResult<&str, Token> {
@@ -59,17 +56,34 @@ fn parse_expression(input: &str) -> Result<Expression, ExpressionError> {
     if input.is_empty() {
         return Err(ExpressionError::EmptyExpression);
     }
-    let (rest, patterns) = many1(nom::branch::alt((
+
+    let mut expression = Expression::default();
+
+    let mut expression_str = input;
+    if input.starts_with("^") {
+        expression.start_anchor = true;
+        expression_str = &expression_str[1..];
+    }
+
+    if input.ends_with("$") {
+        expression.end_anchor = true;
+        expression_str = &expression_str[..expression_str.len() - 1];
+    }
+
+    let (rest, tokens) = many1(alt((
         parse_digit,
         parse_alphanumeric,
         parse_char_group,
         parse_tag,
-    )))(input)
+    )))(expression_str)
     .map_err(|_| ExpressionError::Unsupported(input.to_owned()))?;
+
     if !rest.is_empty() {
-        return Err(ExpressionError::Unsupported(rest.to_owned()));
+        return Err(ExpressionError::Unsupported(rest.to_owned()))?;
     }
-    Ok(Expression { tokens: patterns })
+
+    expression.tokens = tokens;
+    Ok(expression)
 }
 
 impl FromStr for Expression {
@@ -106,7 +120,25 @@ mod tests {
 
     #[test]
     fn test_unsupported_token() {
-        let result = Expression::from_str("a$").unwrap_err();
-        assert_eq!(result, ExpressionError::Unsupported("$".to_string()));
+        let result = Expression::from_str("a\\n").unwrap_err();
+        assert_eq!(result, ExpressionError::Unsupported("\\n".to_string()));
+    }
+
+    #[test]
+    fn test_anchors() {
+        let result = Expression::from_str("^a").unwrap();
+        assert!(result.start_anchor);
+
+        let result = Expression::from_str("a$").unwrap();
+        assert!(result.end_anchor);
+    }
+
+    #[test]
+    fn test_anchors_misplacement() {
+        let result = Expression::from_str("a^").unwrap_err();
+        assert_eq!(result, ExpressionError::Unsupported("^".to_string()));
+
+        let result = Expression::from_str("$a").unwrap_err();
+        assert_eq!(result, ExpressionError::Unsupported("$a".to_string()));
     }
 }

@@ -13,9 +13,9 @@ fn main() {
         process::exit(1);
     }
 
-    let pattern_raw = env::args().nth(2).unwrap();
-    let Ok(expression) = Expression::from_str(&pattern_raw) else {
-        println!("Invalid pattern: {}", pattern_raw);
+    let expression_raw = env::args().nth(2).unwrap();
+    let Ok(expression) = Expression::from_str(&expression_raw) else {
+        println!("Invalid pattern: {}", expression_raw);
         process::exit(1);
     };
 
