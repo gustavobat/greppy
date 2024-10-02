@@ -1,6 +1,7 @@
 use crate::error::ValidationError;
 use crate::expression::Expression;
 use crate::expression::Token;
+use crate::size_hint::SizeHintTrait;
 
 type ValidationResult<'a> = Result<&'a str, ValidationError>;
 
@@ -109,6 +110,7 @@ impl Validation for Token {
 
 fn validate_substring<'a>(input: &'a str, expression: &Expression) -> ValidationResult<'a> {
     let mut current_input = input;
+    println!("{}", current_input);
     for token in &expression.tokens {
         match token.validate(current_input) {
             Ok(new_input) => {
@@ -134,14 +136,26 @@ fn gen_search_space(expression: &Expression, input: &str) -> Vec<(usize, usize)>
         0..input.len()
     };
 
+    let size_hint = expression.size_hint();
+
     if expression.end_anchor {
-        return starts.map(move |i| (i, input.len())).collect();
+        return starts
+            .filter(|start| {
+                let end = input.len();
+                let len = end - start;
+                size_hint.is_compatible(len)
+            })
+            .map(|start| (start, input.len()))
+            .collect();
     }
 
     let mut search_space = Vec::new();
     for start in starts {
         for end in start..input.len() + 1 {
-            search_space.push((start, end));
+            let len = end - start;
+            if size_hint.is_compatible(len) {
+                search_space.push((start, end));
+            }
         }
     }
     search_space
