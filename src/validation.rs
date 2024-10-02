@@ -64,6 +64,13 @@ fn validate_token<'a>(input: &'a str, token: &Token) -> ValidationResult<'a> {
             }
             Ok(current_input)
         }
+        Token::ZeroOrMore(c) => {
+            let mut current_input = input;
+            while current_input.starts_with(*c) {
+                current_input = &current_input[1..];
+            }
+            Ok(current_input)
+        }
     }
 }
 
@@ -217,5 +224,13 @@ mod tests {
         assert!(expression.validate("ab"));
         assert!(expression.validate("abbbbb"));
         assert!(!expression.validate("cbb"));
+    }
+
+    #[test]
+    fn test_zero_or_more() {
+        let expression = Expression::from_str("ab?").unwrap();
+        assert!(expression.validate("a"));
+        assert!(expression.validate("abc"));
+        assert!(expression.validate("abbbbb"));
     }
 }

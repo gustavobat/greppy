@@ -11,6 +11,7 @@ pub enum Token {
     PosCharGroup(HashSet<char>),
     NegCharGroup(HashSet<char>),
     OneOrMore(char),
+    ZeroOrMore(char),
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -85,6 +86,15 @@ fn parse_expression(input: &str) -> Result<Expression, ExpressionError> {
                     _ => return Err(ExpressionError::Unsupported("+".to_string())),
                 }
             }
+            '?' => {
+                let last_token = tokens
+                    .pop()
+                    .ok_or(ExpressionError::UnprecededQualifier('?'))?;
+                match last_token {
+                    Token::Tag(c) => tokens.push(Token::ZeroOrMore(c)),
+                    _ => return Err(ExpressionError::Unsupported("?".to_string())),
+                }
+            }
             '^' | '$' => return Err(ExpressionError::InvalidAnchorPosition(c)),
             c => tokens.push(Token::Tag(c)),
         }
@@ -116,6 +126,7 @@ mod tests {
     #[test_case("[ab]", vec![Token::PosCharGroup(HashSet::from(['a', 'b']))]; "positive char group")]
     #[test_case("[^ab]", vec![Token::NegCharGroup(HashSet::from(['a', 'b']))]; "negative char group")]
     #[test_case("ab+", vec![Token::Tag('a'), Token::OneOrMore('b')]; "one ore more")]
+    #[test_case("ab?", vec![Token::Tag('a'), Token::ZeroOrMore('b')]; "zero or more")]
     fn test_expression(input: &str, expected_tokens: Vec<Token>) {
         let result = Expression::from_str(input).unwrap();
         assert_eq!(result.tokens, expected_tokens);
