@@ -77,25 +77,41 @@ fn validate_token<'a>(input: &'a str, token: &Token) -> ValidationResult<'a> {
             }
             Ok(&input[1..])
         }
+        Token::Alternation((left, right)) => {
+            if let Ok(new_input) = validate_substring(
+                input,
+                &Expression {
+                    tokens: left.clone(),
+                    ..Default::default()
+                },
+            ) {
+                return Ok(new_input);
+            }
+            validate_substring(
+                input,
+                &Expression {
+                    tokens: right.clone(),
+                    ..Default::default()
+                },
+            )
+        }
     }
 }
 
-fn validate_substring(input: &str, expression: &Expression) -> bool {
+fn validate_substring<'a>(input: &'a str, expression: &Expression) -> ValidationResult<'a> {
     let mut current_input = input;
     for token in &expression.tokens {
         match validate_token(current_input, token) {
             Ok(new_input) => {
                 current_input = new_input;
             }
-            Err(_) => {
-                return false;
-            }
+            Err(_) => return Err(()),
         }
     }
     if expression.end_anchor && !current_input.is_empty() {
-        return false;
+        return Err(());
     }
-    true
+    Ok(current_input)
 }
 
 fn gen_search_space(expression: &Expression, input: &str) -> Vec<(usize, usize)> {
@@ -131,7 +147,7 @@ impl Validation for Expression {
         let search_space = gen_search_space(self, input);
         for (start, end) in search_space {
             let substring = &input[start..end];
-            if validate_substring(substring, self) {
+            if validate_substring(substring, self).is_ok() {
                 return true;
             }
         }
@@ -248,5 +264,13 @@ mod tests {
         assert!(expression.validate(" "));
         assert!(expression.validate("$!"));
         assert!(!expression.validate(""));
+    }
+
+    #[test]
+    fn test_alternation() {
+        let expression = Expression::from_str("(a|b)").unwrap();
+        assert!(expression.validate("a"));
+        assert!(expression.validate("b"));
+        assert!(!expression.validate("c"));
     }
 }

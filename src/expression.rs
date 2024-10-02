@@ -13,6 +13,7 @@ pub enum Token {
     OneOrMore(char),
     ZeroOrMore(char),
     Wildcard,
+    Alternation((Vec<Token>, Vec<Token>)),
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -97,6 +98,23 @@ fn parse_expression(input: &str) -> Result<Expression, ExpressionError> {
                 }
             }
             '.' => tokens.push(Token::Wildcard),
+            '(' => {
+                let mut left = vec![];
+                let mut right = vec![];
+
+                let mut current = &mut left;
+                for c in iter.by_ref() {
+                    match c {
+                        '|' => {
+                            current = &mut right;
+                        }
+                        ')' => break,
+                        c => current.push(Token::Tag(c)),
+                    }
+                }
+
+                tokens.push(Token::Alternation((left, right)));
+            }
             '^' | '$' => return Err(ExpressionError::InvalidAnchorPosition(c)),
             c => tokens.push(Token::Tag(c)),
         }
@@ -133,6 +151,18 @@ mod tests {
     fn test_expression(input: &str, expected_tokens: Vec<Token>) {
         let result = Expression::from_str(input).unwrap();
         assert_eq!(result.tokens, expected_tokens);
+    }
+
+    #[test]
+    fn test_alternation() {
+        let result = Expression::from_str("(a|b)").unwrap();
+        assert_eq!(
+            result.tokens,
+            vec![Token::Alternation((
+                vec![Token::Tag('a')],
+                vec![Token::Tag('b')]
+            ))]
+        );
     }
 
     #[test]
