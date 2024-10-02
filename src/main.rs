@@ -3,8 +3,8 @@ use std::io;
 use std::process;
 use std::str::FromStr;
 
-use codecrafters_grep::expression::Expression;
-use codecrafters_grep::validation::Validation;
+use greppy::expression::Expression;
+use greppy::validation::Validation;
 
 // Usage: echo <input_text> | your_program.sh -E <pattern>
 fn main() {

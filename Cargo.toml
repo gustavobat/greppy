@@ -1,7 +1,7 @@
 [package]
-name = "codecrafters-grep"
+name = "greppy"
 version = "0.1.0"
-authors = ["Codecrafters <hello@codecrafters.io>"]
+authors = ["Gustavo Batistela @gustavobat"]
 edition = "2021"
 rust-version = "1.80"
 
