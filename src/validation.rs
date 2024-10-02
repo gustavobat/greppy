@@ -71,6 +71,12 @@ fn validate_token<'a>(input: &'a str, token: &Token) -> ValidationResult<'a> {
             }
             Ok(current_input)
         }
+        Token::Wildcard => {
+            if input.is_empty() {
+                return Err(());
+            }
+            Ok(&input[1..])
+        }
     }
 }
 
@@ -232,5 +238,15 @@ mod tests {
         assert!(expression.validate("a"));
         assert!(expression.validate("abc"));
         assert!(expression.validate("abbbbb"));
+    }
+
+    #[test]
+    fn test_wildcard() {
+        let expression = Expression::from_str(".").unwrap();
+        assert!(expression.validate("a"));
+        assert!(expression.validate("1"));
+        assert!(expression.validate(" "));
+        assert!(expression.validate("$!"));
+        assert!(!expression.validate(""));
     }
 }
