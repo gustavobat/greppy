@@ -11,3 +11,11 @@ pub enum ExpressionError {
     #[error("Invalid unpreceded qualifier '{0}'")]
     UnprecededQualifier(char),
 }
+
+#[derive(Error, Debug, PartialEq, Eq)]
+pub enum ValidationError {
+    #[error("The provided input is empty")]
+    EmptyInput,
+    #[error("The expression does not match the input")]
+    InputMismatch,
+}

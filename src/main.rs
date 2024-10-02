@@ -22,7 +22,7 @@ fn main() {
     let mut input_line = String::new();
     io::stdin().read_line(&mut input_line).unwrap();
 
-    if expression.validate(&input_line) {
+    if expression.validate(&input_line).is_ok() {
         process::exit(0)
     } else {
         process::exit(1)

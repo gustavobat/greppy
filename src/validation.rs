@@ -1,99 +1,108 @@
+use crate::error::ValidationError;
 use crate::expression::Expression;
 use crate::expression::Token;
 
-type ValidationResult<'a> = Result<&'a str, ()>;
+type ValidationResult<'a> = Result<&'a str, ValidationError>;
 
-fn validate_token<'a>(input: &'a str, token: &Token) -> ValidationResult<'a> {
-    match token {
-        Token::Tag(c) => {
-            if input.starts_with(*c) {
-                Ok(&input[1..])
-            } else {
-                Err(())
-            }
-        }
-        Token::Digit => {
-            let Some(c) = input.chars().next() else {
-                return Err(());
-            };
-            if c.is_ascii_digit() {
-                Ok(&input[1..])
-            } else {
-                Err(())
-            }
-        }
-        Token::AlphaNumeric => {
-            let Some(c) = input.chars().next() else {
-                return Err(());
-            };
-            if c.is_alphanumeric() {
-                Ok(&input[1..])
-            } else {
-                Err(())
-            }
-        }
-        Token::PosCharGroup(group) => {
-            let Some(c) = input.chars().next() else {
-                return Err(());
-            };
-            if group.contains(&c) {
-                Ok(&input[1..])
-            } else {
-                Err(())
-            }
-        }
-        Token::NegCharGroup(group) => {
-            let Some(c) = input.chars().next() else {
-                return Err(());
-            };
-            if !group.contains(&c) {
-                Ok(&input[1..])
-            } else {
-                Err(())
-            }
-        }
-        Token::OneOrMore(c) => {
-            let mut current_input = input;
-            if !current_input.starts_with(*c) {
-                return Err(());
-            }
-            current_input = &current_input[1..];
+pub trait Validation {
+    fn validate<'a>(&self, input: &'a str) -> ValidationResult<'a>;
+}
 
-            while current_input.starts_with(*c) {
+impl Validation for Expression {
+    fn validate<'a>(&self, input: &'a str) -> ValidationResult<'a> {
+        let search_space = gen_search_space(self, input);
+        for (start, end) in search_space {
+            let substring = &input[start..end];
+            let res = validate_substring(substring, self);
+            if res.is_ok() {
+                return res;
+            }
+        }
+        Err(ValidationError::InputMismatch)
+    }
+}
+
+impl Validation for Token {
+    fn validate<'a>(&self, input: &'a str) -> ValidationResult<'a> {
+        match self {
+            Token::Tag(c) => {
+                if input.starts_with(*c) {
+                    Ok(&input[1..])
+                } else {
+                    Err(ValidationError::InputMismatch)
+                }
+            }
+            Token::Digit => {
+                let Some(c) = input.chars().next() else {
+                    return Err(ValidationError::InputMismatch);
+                };
+                if c.is_ascii_digit() {
+                    Ok(&input[1..])
+                } else {
+                    Err(ValidationError::InputMismatch)
+                }
+            }
+            Token::AlphaNumeric => {
+                let Some(c) = input.chars().next() else {
+                    return Err(ValidationError::InputMismatch);
+                };
+                if c.is_alphanumeric() {
+                    Ok(&input[1..])
+                } else {
+                    Err(ValidationError::InputMismatch)
+                }
+            }
+            Token::PosCharGroup(group) => {
+                let Some(c) = input.chars().next() else {
+                    return Err(ValidationError::InputMismatch);
+                };
+                if group.contains(&c) {
+                    Ok(&input[1..])
+                } else {
+                    Err(ValidationError::InputMismatch)
+                }
+            }
+            Token::NegCharGroup(group) => {
+                let Some(c) = input.chars().next() else {
+                    return Err(ValidationError::InputMismatch);
+                };
+                if !group.contains(&c) {
+                    Ok(&input[1..])
+                } else {
+                    Err(ValidationError::InputMismatch)
+                }
+            }
+            Token::OneOrMore(c) => {
+                let mut current_input = input;
+                if !current_input.starts_with(*c) {
+                    return Err(ValidationError::InputMismatch);
+                }
                 current_input = &current_input[1..];
+
+                while current_input.starts_with(*c) {
+                    current_input = &current_input[1..];
+                }
+                Ok(current_input)
             }
-            Ok(current_input)
-        }
-        Token::ZeroOrMore(c) => {
-            let mut current_input = input;
-            while current_input.starts_with(*c) {
-                current_input = &current_input[1..];
+            Token::ZeroOrMore(c) => {
+                let mut current_input = input;
+                while current_input.starts_with(*c) {
+                    current_input = &current_input[1..];
+                }
+                Ok(current_input)
             }
-            Ok(current_input)
-        }
-        Token::Wildcard => {
-            if input.is_empty() {
-                return Err(());
+            Token::Wildcard => {
+                if input.is_empty() {
+                    return Err(ValidationError::InputMismatch);
+                }
+                Ok(&input[1..])
             }
-            Ok(&input[1..])
-        }
-        Token::Alternation((left, right)) => {
-            if let Ok(new_input) = validate_substring(
-                input,
-                &Expression {
-                    tokens: left.clone(),
-                    ..Default::default()
-                },
-            ) {
-                return Ok(new_input);
+            Token::Alternation((left, right)) => {
+                if let Ok(new_input) = validate_substring(input, &left.clone().into()) {
+                    return Ok(new_input);
+                }
+                validate_substring(input, &right.clone().into())
             }
-            validate_substring(
-                input,
-                &Expression {
-                    tokens: right.clone(),
-                    ..Default::default()
-                },
-            )
         }
     }
 }
@@ -101,15 +110,15 @@ fn validate_token<'a>(input: &'a str, token: &Token) -> ValidationResult<'a> {
 fn validate_substring<'a>(input: &'a str, expression: &Expression) -> ValidationResult<'a> {
     let mut current_input = input;
     for token in &expression.tokens {
-        match validate_token(current_input, token) {
+        match token.validate(current_input) {
             Ok(new_input) => {
                 current_input = new_input;
             }
-            Err(_) => return Err(()),
+            Err(_) => return Err(ValidationError::InputMismatch),
         }
     }
     if expression.end_anchor && !current_input.is_empty() {
-        return Err(());
+        return Err(ValidationError::InputMismatch);
     }
     Ok(current_input)
 }
@@ -138,23 +147,6 @@ fn gen_search_space(expression: &Expression, input: &str) -> Vec<(usize, usize)>
     search_space
 }
 
-pub trait Validation {
-    fn validate(&self, input: &str) -> bool;
-}
-
-impl Validation for Expression {
-    fn validate(&self, input: &str) -> bool {
-        let search_space = gen_search_space(self, input);
-        for (start, end) in search_space {
-            let substring = &input[start..end];
-            if validate_substring(substring, self).is_ok() {
-                return true;
-            }
-        }
-        false
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -163,114 +155,114 @@ mod tests {
     #[test]
     fn test_tag_validation() {
         let expression = Expression::from_str("abc").unwrap();
-        assert!(expression.validate("abc"));
-        assert!(expression.validate("abcabc"));
-        assert!(!expression.validate("aba"));
-        assert!(!expression.validate("123"));
-        assert!(!expression.validate(""));
-        assert!(!expression.validate(" "));
-        assert!(!expression.validate("$!_"));
+        assert!(expression.validate("abc").is_ok());
+        assert!(expression.validate("abcabc").is_ok());
+        assert!(expression.validate("aba").is_err());
+        assert!(expression.validate("123").is_err());
+        assert!(expression.validate("").is_err());
+        assert!(expression.validate(" ").is_err());
+        assert!(expression.validate("$!_").is_err());
     }
 
     #[test]
     fn test_digit_validation() {
         let expression = Expression::from_str("\\d").unwrap();
-        assert!(expression.validate("1"));
-        assert!(expression.validate("123"));
-        assert!(expression.validate("ab1abc"));
-        assert!(!expression.validate(""));
-        assert!(!expression.validate(" "));
-        assert!(!expression.validate("$!_"));
-        assert!(!expression.validate("a"));
+        assert!(expression.validate("1").is_ok());
+        assert!(expression.validate("123").is_ok());
+        assert!(expression.validate("ab1abc").is_ok());
+        assert!(expression.validate("").is_err());
+        assert!(expression.validate(" ").is_err());
+        assert!(expression.validate("$!_").is_err());
+        assert!(expression.validate("a").is_err());
     }
 
     #[test]
     fn test_alpha_numeric_validation() {
         let expression = Expression::from_str("\\w").unwrap();
-        assert!(expression.validate("1"));
-        assert!(expression.validate("a"));
-        assert!(!expression.validate(""));
-        assert!(!expression.validate("$!"));
+        assert!(expression.validate("1").is_ok());
+        assert!(expression.validate("a").is_ok());
+        assert!(expression.validate("").is_err());
+        assert!(expression.validate("$!").is_err());
     }
 
     #[test]
     fn test_positive_char_group() {
         let expression = Expression::from_str("[abc]").unwrap();
-        assert!(expression.validate("a"));
-        assert!(expression.validate("b"));
-        assert!(expression.validate("c"));
-        assert!(expression.validate("ab"));
-        assert!(expression.validate("da"));
-        assert!(!expression.validate(""));
-        assert!(!expression.validate(" "));
-        assert!(!expression.validate("$![]"));
-        assert!(!expression.validate("1"));
+        assert!(expression.validate("a").is_ok());
+        assert!(expression.validate("b").is_ok());
+        assert!(expression.validate("c").is_ok());
+        assert!(expression.validate("ab").is_ok());
+        assert!(expression.validate("da").is_ok());
+        assert!(expression.validate("").is_err());
+        assert!(expression.validate(" ").is_err());
+        assert!(expression.validate("$![]").is_err());
+        assert!(expression.validate("1").is_err());
     }
 
     #[test]
     fn test_negative_char_group() {
         let expression = Expression::from_str("[^abc]").unwrap();
-        assert!(!expression.validate("a"));
-        assert!(!expression.validate("b"));
-        assert!(!expression.validate("c"));
-        assert!(!expression.validate("ab"));
-        assert!(expression.validate("da"));
-        assert!(expression.validate("def"));
-        assert!(!expression.validate(""));
-        assert!(expression.validate(" "));
-        assert!(expression.validate("$![]"));
-        assert!(expression.validate("1"));
+        assert!(expression.validate("a").is_err());
+        assert!(expression.validate("b").is_err());
+        assert!(expression.validate("c").is_err());
+        assert!(expression.validate("ab").is_err());
+        assert!(expression.validate("da").is_ok());
+        assert!(expression.validate("def").is_ok());
+        assert!(expression.validate("").is_err());
+        assert!(expression.validate(" ").is_ok());
+        assert!(expression.validate("$![]").is_ok());
+        assert!(expression.validate("1").is_ok());
     }
 
     #[test]
     fn test_start_anchor() {
         let expression = Expression::from_str("^abc").unwrap();
-        assert!(expression.validate("abc"));
-        assert!(expression.validate("abcc"));
-        assert!(!expression.validate("aabc"));
-        assert!(!expression.validate("^abc"));
+        assert!(expression.validate("abc").is_ok());
+        assert!(expression.validate("abcc").is_ok());
+        assert!(expression.validate("aabc").is_err());
+        assert!(expression.validate("^abc").is_err());
     }
 
     #[test]
     fn test_end_anchor() {
         let expression = Expression::from_str("abc$").unwrap();
-        assert!(expression.validate("abc"));
-        assert!(expression.validate("aabc"));
-        assert!(!expression.validate("abcc"));
-        assert!(!expression.validate("abc$"));
+        assert!(expression.validate("abc").is_ok());
+        assert!(expression.validate("aabc").is_ok());
+        assert!(expression.validate("abcc").is_err());
+        assert!(expression.validate("abc$").is_err());
     }
 
     #[test]
     fn test_one_or_more() {
         let expression = Expression::from_str("ab+").unwrap();
-        assert!(expression.validate("ab"));
-        assert!(expression.validate("abbbbb"));
-        assert!(!expression.validate("cbb"));
+        assert!(expression.validate("ab").is_ok());
+        assert!(expression.validate("abbbbb").is_ok());
+        assert!(expression.validate("cbb").is_err());
     }
 
     #[test]
     fn test_zero_or_more() {
         let expression = Expression::from_str("ab?").unwrap();
-        assert!(expression.validate("a"));
-        assert!(expression.validate("abc"));
-        assert!(expression.validate("abbbbb"));
+        assert!(expression.validate("a").is_ok());
+        assert!(expression.validate("abc").is_ok());
+        assert!(expression.validate("abbbbb").is_ok());
     }
 
     #[test]
     fn test_wildcard() {
         let expression = Expression::from_str(".").unwrap();
-        assert!(expression.validate("a"));
-        assert!(expression.validate("1"));
-        assert!(expression.validate(" "));
-        assert!(expression.validate("$!"));
-        assert!(!expression.validate(""));
+        assert!(expression.validate("a").is_ok());
+        assert!(expression.validate("1").is_ok());
+        assert!(expression.validate(" ").is_ok());
+        assert!(expression.validate("$!").is_ok());
+        assert!(expression.validate("").is_err());
     }
 
     #[test]
     fn test_alternation() {
         let expression = Expression::from_str("(a|b)").unwrap();
-        assert!(expression.validate("a"));
-        assert!(expression.validate("b"));
-        assert!(!expression.validate("c"));
+        assert!(expression.validate("a").is_ok());
+        assert!(expression.validate("b").is_ok());
+        assert!(expression.validate("c").is_err());
     }
 }

@@ -132,6 +132,15 @@ impl FromStr for Expression {
     }
 }
 
+impl From<Vec<Token>> for Expression {
+    fn from(tokens: Vec<Token>) -> Self {
+        Expression {
+            tokens,
+            ..Default::default()
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
