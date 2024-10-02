@@ -3,20 +3,14 @@ use std::str::FromStr;
 
 use crate::error::ExpressionError;
 
-use nom::branch::alt;
-use nom::bytes::complete::tag;
-use nom::bytes::complete::take_until;
-use nom::multi::many1;
-use nom::sequence::tuple;
-use nom::IResult;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Token {
-    Tag(String),
+    Tag(char),
     Digit,
     AlphaNumeric,
     PosCharGroup(HashSet<char>),
     NegCharGroup(HashSet<char>),
+    OneOrMore(char),
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -26,60 +20,74 @@ pub struct Expression {
     pub end_anchor: bool,
 }
 
-fn parse_digit(input: &str) -> IResult<&str, Token> {
-    let (input, _) = tag("\\d")(input)?;
-    Ok((input, Token::Digit))
-}
-
-fn parse_alphanumeric(input: &str) -> IResult<&str, Token> {
-    let (input, _) = tag("\\w")(input)?;
-    Ok((input, Token::AlphaNumeric))
-}
-
-fn parse_char_group(input: &str) -> IResult<&str, Token> {
-    let (input, (_, chars, _)) = tuple((tag("["), take_until("]"), tag("]")))(input)?;
-    if let Some(chars) = chars.strip_prefix("^") {
-        return Ok((input, Token::NegCharGroup(chars.chars().collect())));
-    }
-    Ok((input, Token::PosCharGroup(chars.chars().collect())))
-}
-
-fn parse_tag(input: &str) -> IResult<&str, Token> {
-    let (input, tag) = many1(nom::branch::alt((
-        nom::character::complete::alphanumeric1,
-        nom::character::complete::space1,
-    )))(input)?;
-    Ok((input, Token::Tag(tag.into_iter().collect())))
-}
-
 fn parse_expression(input: &str) -> Result<Expression, ExpressionError> {
     if input.is_empty() {
         return Err(ExpressionError::EmptyExpression);
     }
 
     let mut expression = Expression::default();
+    let mut tokens = vec![];
 
-    let mut expression_str = input;
-    if input.starts_with("^") {
+    let mut expr_str = input;
+    if let Some(stripped) = input.strip_prefix("^") {
+        expr_str = stripped;
         expression.start_anchor = true;
-        expression_str = &expression_str[1..];
     }
 
-    if input.ends_with("$") {
+    if let Some(stripped) = expr_str.strip_suffix("$") {
+        expr_str = stripped;
         expression.end_anchor = true;
-        expression_str = &expression_str[..expression_str.len() - 1];
     }
 
-    let (rest, tokens) = many1(alt((
-        parse_digit,
-        parse_alphanumeric,
-        parse_char_group,
-        parse_tag,
-    )))(expression_str)
-    .map_err(|_| ExpressionError::Unsupported(input.to_owned()))?;
+    let mut iter = expr_str.chars().peekable();
 
-    if !rest.is_empty() {
-        return Err(ExpressionError::Unsupported(rest.to_owned()))?;
+    while let Some(c) = iter.next() {
+        match c {
+            '\\' => {
+                let next = iter.next();
+                match next {
+                    Some('d') => tokens.push(Token::Digit),
+                    Some('w') => tokens.push(Token::AlphaNumeric),
+                    Some(c) => return Err(ExpressionError::Unsupported(format!("\\{}", c))),
+                    None => return Err(ExpressionError::Unsupported("\\".to_string())),
+                }
+            }
+            '[' => {
+                let mut group = HashSet::new();
+                let mut negated = false;
+
+                if let Some('^') = iter.peek() {
+                    negated = true;
+                    iter.next();
+                }
+
+                for c in iter.by_ref() {
+                    match c {
+                        ']' => break,
+                        c => {
+                            group.insert(c);
+                        }
+                    }
+                }
+
+                if negated {
+                    tokens.push(Token::NegCharGroup(group));
+                } else {
+                    tokens.push(Token::PosCharGroup(group));
+                }
+            }
+            '+' => {
+                let last_token = tokens
+                    .pop()
+                    .ok_or(ExpressionError::UnprecededQualifier('+'))?;
+                match last_token {
+                    Token::Tag(c) => tokens.push(Token::OneOrMore(c)),
+                    _ => return Err(ExpressionError::Unsupported("+".to_string())),
+                }
+            }
+            '^' | '$' => return Err(ExpressionError::InvalidAnchorPosition(c)),
+            c => tokens.push(Token::Tag(c)),
+        }
     }
 
     expression.tokens = tokens;
@@ -100,13 +108,14 @@ mod tests {
 
     use test_case::test_case;
 
-    #[test_case("a", vec![Token::Tag("a".to_owned())]; "single char")]
-    #[test_case("ab", vec![Token::Tag("ab".to_owned())]; "multiple chars")]
-    #[test_case("12", vec![Token::Tag("12".to_owned())]; "numeric tag")]
+    #[test_case("a", vec![Token::Tag('a')]; "single char")]
+    #[test_case("ab", vec![Token::Tag('a'), Token::Tag('b')]; "multiple chars")]
+    #[test_case("12", vec![Token::Tag('1'), Token::Tag('2')]; "numeric chars")]
     #[test_case("\\d", vec![Token::Digit]; "digit token")]
     #[test_case("\\w", vec![Token::AlphaNumeric]; "alphanumeric token")]
     #[test_case("[ab]", vec![Token::PosCharGroup(HashSet::from(['a', 'b']))]; "positive char group")]
     #[test_case("[^ab]", vec![Token::NegCharGroup(HashSet::from(['a', 'b']))]; "negative char group")]
+    #[test_case("ab+", vec![Token::Tag('a'), Token::OneOrMore('b')]; "one ore more")]
     fn test_expression(input: &str, expected_tokens: Vec<Token>) {
         let result = Expression::from_str(input).unwrap();
         assert_eq!(result.tokens, expected_tokens);
@@ -136,9 +145,9 @@ mod tests {
     #[test]
     fn test_anchors_misplacement() {
         let result = Expression::from_str("a^").unwrap_err();
-        assert_eq!(result, ExpressionError::Unsupported("^".to_string()));
+        assert_eq!(result, ExpressionError::InvalidAnchorPosition('^'));
 
         let result = Expression::from_str("$a").unwrap_err();
-        assert_eq!(result, ExpressionError::Unsupported("$a".to_string()));
+        assert_eq!(result, ExpressionError::InvalidAnchorPosition('$'));
     }
 }

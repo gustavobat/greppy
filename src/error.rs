@@ -6,4 +6,8 @@ pub enum ExpressionError {
     Unsupported(String),
     #[error("The provided expression is empty")]
     EmptyExpression,
+    #[error("Invalid position of anchor '{0}'")]
+    InvalidAnchorPosition(char),
+    #[error("Invalid unpreceded qualifier '{0}'")]
+    UnprecededQualifier(char),
 }
