@@ -110,7 +110,6 @@ impl Validation for Token {
 
 fn validate_substring<'a>(input: &'a str, expression: &Expression) -> ValidationResult<'a> {
     let mut current_input = input;
-    println!("{}", current_input);
     for token in &expression.tokens {
         match token.validate(current_input) {
             Ok(new_input) => {
