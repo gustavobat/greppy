@@ -9,3 +9,4 @@ rust-version = "1.80"
 clap = { version = "4.5.20", features = ["derive"] }
 test-case = "3.3.1"
 thiserror = "1.0.38"
+colored = "2.1.0"

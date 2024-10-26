@@ -2,6 +2,7 @@ use crate::error::ValidationError;
 use crate::expression::Expression;
 use crate::expression::Token;
 use crate::size_hint::SizeHintTrait;
+use colored::Colorize;
 
 type ValidationResult<'a> = Result<&'a str, ValidationError>;
 
@@ -16,6 +17,7 @@ impl Validation for Expression {
             let substring = &input[start..end];
             let res = validate_substring(substring, self);
             if res.is_ok() {
+                print_result(input, start, end);
                 return res;
             }
         }
@@ -106,6 +108,15 @@ impl Validation for Token {
             }
         }
     }
+}
+
+fn print_result(input: &str, start: usize, end: usize) {
+    println!(
+        "{}{}{}",
+        &input[..start],
+        &input[start..end].red().bold(),
+        &input[end..]
+    );
 }
 
 fn validate_substring<'a>(input: &'a str, expression: &Expression) -> ValidationResult<'a> {
