@@ -82,7 +82,7 @@ fn parse_expression(input: &str) -> Result<Expression, ExpressionError> {
             '+' => {
                 let last_token = tokens
                     .pop()
-                    .ok_or(ExpressionError::UnprecededQualifier('+'))?;
+                    .ok_or(ExpressionError::QualifierNotPreceded('+'))?;
                 match last_token {
                     Token::Tag(c) => tokens.push(Token::OneOrMore(c)),
                     _ => return Err(ExpressionError::Unsupported("+".to_string())),
@@ -91,7 +91,7 @@ fn parse_expression(input: &str) -> Result<Expression, ExpressionError> {
             '?' => {
                 let last_token = tokens
                     .pop()
-                    .ok_or(ExpressionError::UnprecededQualifier('?'))?;
+                    .ok_or(ExpressionError::QualifierNotPreceded('?'))?;
                 match last_token {
                     Token::Tag(c) => tokens.push(Token::ZeroOrMore(c)),
                     _ => return Err(ExpressionError::Unsupported("?".to_string())),

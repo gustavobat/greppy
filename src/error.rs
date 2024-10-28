@@ -8,8 +8,8 @@ pub enum ExpressionError {
     EmptyExpression,
     #[error("Invalid position of anchor '{0}'")]
     InvalidAnchorPosition(char),
-    #[error("Invalid unpreceded qualifier '{0}'")]
-    UnprecededQualifier(char),
+    #[error("Qualifier '{0}' must be preceded by another character")]
+    QualifierNotPreceded(char),
 }
 
 #[derive(Error, Debug, PartialEq, Eq)]
