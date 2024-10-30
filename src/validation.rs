@@ -1,10 +1,8 @@
 use crate::error::ValidationError;
 use crate::expression::Expression;
 use crate::expression::Token;
-use crate::size_hint::SizeHintTrait;
-use colored::Colorize;
 
-type ValidationResult<'a> = Result<&'a str, ValidationError>;
+pub(crate) type ValidationResult<'a> = Result<&'a str, ValidationError>;
 
 pub trait Validation {
     fn validate<'a>(&self, input: &'a str) -> ValidationResult<'a>;
@@ -12,16 +10,19 @@ pub trait Validation {
 
 impl Validation for Expression {
     fn validate<'a>(&self, input: &'a str) -> ValidationResult<'a> {
-        let search_space = gen_search_space(self, input);
-        for (start, end) in search_space {
-            let substring = &input[start..end];
-            let res = validate_substring(substring, self);
-            if res.is_ok() {
-                print_result(input, start, end);
-                return res;
+        let mut current_input = input;
+        for token in &self.tokens {
+            match token.validate(current_input) {
+                Ok(new_input) => {
+                    current_input = new_input;
+                }
+                Err(_) => return Err(ValidationError::InputMismatch),
             }
         }
-        Err(ValidationError::InputMismatch)
+        if self.end_anchor && !current_input.is_empty() {
+            return Err(ValidationError::InputMismatch);
+        }
+        Ok(current_input)
     }
 }
 
@@ -101,74 +102,13 @@ impl Validation for Token {
                 Ok(&input[1..])
             }
             Token::Alternation((left, right)) => {
-                if let Ok(new_input) = validate_substring(input, &left.clone().into()) {
+                if let Ok(new_input) = left.validate(input) {
                     return Ok(new_input);
                 }
-                validate_substring(input, &right.clone().into())
+                right.validate(input)
             }
         }
     }
-}
-
-fn print_result(input: &str, start: usize, end: usize) {
-    println!(
-        "{}{}{}",
-        &input[..start],
-        &input[start..end].red().bold(),
-        &input[end..]
-    );
-}
-
-fn validate_substring<'a>(input: &'a str, expression: &Expression) -> ValidationResult<'a> {
-    let mut current_input = input;
-    for token in &expression.tokens {
-        match token.validate(current_input) {
-            Ok(new_input) => {
-                current_input = new_input;
-            }
-            Err(_) => return Err(ValidationError::InputMismatch),
-        }
-    }
-    if expression.end_anchor && !current_input.is_empty() {
-        return Err(ValidationError::InputMismatch);
-    }
-    Ok(current_input)
-}
-
-fn gen_search_space(expression: &Expression, input: &str) -> Vec<(usize, usize)> {
-    if input.is_empty() {
-        return vec![];
-    }
-
-    let starts = if expression.start_anchor {
-        0..1
-    } else {
-        0..input.len()
-    };
-
-    let size_hint = expression.size_hint();
-
-    if expression.end_anchor {
-        return starts
-            .filter(|start| {
-                let end = input.len();
-                let len = end - start;
-                size_hint.is_compatible(len)
-            })
-            .map(|start| (start, input.len()))
-            .collect();
-    }
-
-    let mut search_space = Vec::new();
-    for start in starts {
-        for end in start..input.len() + 1 {
-            let len = end - start;
-            if size_hint.is_compatible(len) {
-                search_space.push((start, end));
-            }
-        }
-    }
-    search_space
 }
 
 #[cfg(test)]
@@ -193,7 +133,7 @@ mod tests {
         let expression = Expression::from_str("\\d").unwrap();
         assert!(expression.validate("1").is_ok());
         assert!(expression.validate("123").is_ok());
-        assert!(expression.validate("ab1abc").is_ok());
+        assert!(expression.validate("ab1abc").is_err());
         assert!(expression.validate("").is_err());
         assert!(expression.validate(" ").is_err());
         assert!(expression.validate("$!_").is_err());
@@ -216,7 +156,7 @@ mod tests {
         assert!(expression.validate("b").is_ok());
         assert!(expression.validate("c").is_ok());
         assert!(expression.validate("ab").is_ok());
-        assert!(expression.validate("da").is_ok());
+        assert!(expression.validate("da").is_err());
         assert!(expression.validate("").is_err());
         assert!(expression.validate(" ").is_err());
         assert!(expression.validate("$![]").is_err());
@@ -251,7 +191,7 @@ mod tests {
     fn test_end_anchor() {
         let expression = Expression::from_str("abc$").unwrap();
         assert!(expression.validate("abc").is_ok());
-        assert!(expression.validate("aabc").is_ok());
+        assert!(expression.validate("aabc").is_err());
         assert!(expression.validate("abcc").is_err());
         assert!(expression.validate("abc$").is_err());
     }

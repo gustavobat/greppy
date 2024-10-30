@@ -13,7 +13,7 @@ pub enum Token {
     OneOrMore(char),
     ZeroOrMore(char),
     Wildcard,
-    Alternation((Vec<Token>, Vec<Token>)),
+    Alternation((Expression, Expression)),
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -113,7 +113,7 @@ fn parse_expression(input: &str) -> Result<Expression, ExpressionError> {
                     }
                 }
 
-                tokens.push(Token::Alternation((left, right)));
+                tokens.push(Token::Alternation((left.into(), right.into())));
             }
             '^' | '$' => return Err(ExpressionError::InvalidAnchorPosition(c)),
             c => tokens.push(Token::Tag(c)),
@@ -168,8 +168,8 @@ mod tests {
         assert_eq!(
             result.tokens,
             vec![Token::Alternation((
-                vec![Token::Tag('a')],
-                vec![Token::Tag('b')]
+                vec![Token::Tag('a')].into(),
+                vec![Token::Tag('b')].into()
             ))]
         );
     }

@@ -50,11 +50,11 @@ impl PartialOrd for SizeHint {
     }
 }
 
-pub trait SizeHintTrait {
+pub trait CalculateSizeHint {
     fn size_hint(&self) -> SizeHint;
 }
 
-impl SizeHintTrait for Token {
+impl CalculateSizeHint for Token {
     fn size_hint(&self) -> SizeHint {
         match self {
             Token::Tag(_) => SizeHint::Exact(1),
@@ -66,15 +66,15 @@ impl SizeHintTrait for Token {
             Token::ZeroOrMore(_) => SizeHint::AtLeast(0),
             Token::Wildcard => SizeHint::Exact(1),
             Token::Alternation((a, b)) => {
-                let a_size = Expression::from(a.clone()).size_hint();
-                let b_size = Expression::from(b.clone()).size_hint();
+                let a_size = a.size_hint();
+                let b_size = b.size_hint();
                 max(a_size, b_size)
             }
         }
     }
 }
 
-impl SizeHintTrait for Expression {
+impl CalculateSizeHint for Expression {
     fn size_hint(&self) -> SizeHint {
         self.tokens
             .iter()
@@ -111,7 +111,7 @@ mod tests {
     #[test_case(SizeHint::AtLeast(1), SizeHint::AtLeast(2), Ordering::Less; "at least less")]
     #[test_case(SizeHint::AtLeast(2), SizeHint::AtLeast(1), Ordering::Greater; "at least greater")]
     #[test_case(SizeHint::Exact(10), SizeHint::AtLeast(1), Ordering::Less; "exact less than at least")]
-    fn test_ord_impl(a: SizeHint, b: SizeHint, expected: std::cmp::Ordering) {
+    fn test_ord_impl(a: SizeHint, b: SizeHint, expected: Ordering) {
         assert_eq!(a.cmp(&b), expected);
     }
 }
