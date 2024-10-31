@@ -103,11 +103,11 @@ impl Match {
     }
 
     pub fn intersects(&self, other: &Match) -> bool {
-        self.start <= other.end && self.end >= other.start
+        self.end > other.start && other.end > self.start
     }
 
     pub fn is_adjacent(&self, other: &Match) -> bool {
-        self.start == other.end + 1 || other.start == self.end + 1
+        self.end == other.start || other.end == self.start
     }
 
     pub fn merge(&self, other: &Match) -> Option<Match> {
@@ -125,12 +125,13 @@ impl Match {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
     use test_case::test_case;
 
-    #[test_case((0, 5), (5, 10), true; "point intersection")]
-    #[test_case((0, 5), (6, 10), false; "disjoint adjacent")]
-    #[test_case((0, 5), (7, 10), false; "disjoint distant")]
-    #[test_case((0, 5), (4, 6), true; "overlap")]
+    #[test_case((0, 5), (4, 10), true; "point intersection")]
+    #[test_case((0, 5), (5, 10), false; "disjoint adjacent")]
+    #[test_case((0, 5), (6, 10), false; "disjoint distant")]
+    #[test_case((0, 5), (3, 6), true; "overlap")]
     #[test_case((0, 5), (2, 3), true; "b contained in a")]
     fn test_intersects(a: (usize, usize), b: (usize, usize), expected: bool) {
         let a = Match::new(a.0, a.1);
@@ -139,10 +140,10 @@ mod tests {
         assert_eq!(b.intersects(&a), expected);
     }
 
-    #[test_case((0, 5), (5, 10), false; "point intersection")]
-    #[test_case((0, 5), (6, 10), true; "disjoint adjacent")]
-    #[test_case((0, 5), (7, 10), false; "disjoint distant")]
-    #[test_case((0, 5), (4, 6), false; "overlap")]
+    #[test_case((0, 5), (4, 10), false; "point intersection")]
+    #[test_case((0, 5), (5, 10), true; "disjoint adjacent")]
+    #[test_case((0, 5), (6, 10), false; "disjoint distant")]
+    #[test_case((0, 5), (3, 6), false; "overlap")]
     #[test_case((0, 5), (2, 3), false; "b contained in a")]
     fn test_is_adjacent(a: (usize, usize), b: (usize, usize), expected: bool) {
         let a = Match::new(a.0, a.1);
@@ -151,10 +152,10 @@ mod tests {
         assert_eq!(b.is_adjacent(&a), expected);
     }
 
-    #[test_case((0, 5), (5, 10), Some((0, 10)); "point intersection")]
-    #[test_case((0, 5), (6, 10), Some((0, 10)); "disjoint adjacent")]
-    #[test_case((0, 5), (7, 10), None; "disjoint distant")]
-    #[test_case((0, 5), (4, 6), Some((0, 6)); "overlap")]
+    #[test_case((0, 5), (4, 10), Some((0, 10)); "point intersection")]
+    #[test_case((0, 5), (5, 10), Some((0, 10)); "disjoint adjacent")]
+    #[test_case((0, 5), (6, 10), None; "disjoint distant")]
+    #[test_case((0, 5), (3, 6), Some((0, 6)); "overlap")]
     #[test_case((0, 5), (2, 3), Some((0, 5)); "b contained in a")]
     fn test_merge(a: (usize, usize), b: (usize, usize), res: Option<(usize, usize)>) {
         let a = Match::new(a.0, a.1);
@@ -162,5 +163,17 @@ mod tests {
         let res = res.map(|(start, end)| Match::new(start, end));
         assert_eq!(a.merge(&b), res);
         assert_eq!(b.merge(&a), res);
+    }
+
+    #[test_case("a", "a", vec![Match::new(0, 1)]; "single char complete match")]
+    #[test_case("a", "ab", vec![Match::new(0, 1)]; "single char partial match")]
+    #[test_case("\\w", "a-c", vec![Match::new(0, 1), Match::new(2,3)]; "matched twice")]
+    #[test_case("\\w", "alph4-num3ric", vec![Match::new(0, 5), Match::new(6, 13)]; "complex input")]
+    fn test_solver(expression: &str, input: &str, expected_matches: Vec<Match>) {
+        let expression = Expression::from_str(expression).unwrap();
+        let mut solver = Solver::new(expression, input.to_string());
+        let result = solver.solve();
+        assert_eq!(result, !expected_matches.is_empty());
+        assert_eq!(solver.matches, expected_matches);
     }
 }
