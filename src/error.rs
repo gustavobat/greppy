@@ -11,11 +11,3 @@ pub enum ExpressionError {
     #[error("Qualifier '{0}' must be preceded by another character")]
     QualifierNotPreceded(char),
 }
-
-#[derive(Error, Debug, PartialEq, Eq)]
-pub enum ValidationError {
-    #[error("The provided input is empty")]
-    EmptyInput,
-    #[error("The expression does not match the input")]
-    InputMismatch,
-}

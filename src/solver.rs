@@ -23,7 +23,7 @@ impl Solver {
         for (start, end) in search_space {
             let substring = &self.input[start..end];
             let res = &self.expression.validate(substring);
-            if res.is_ok() {
+            if res.is_some() {
                 let new_match = Match::new(start, end);
                 let last = self.matches.last_mut();
                 if let Some(last) = last {
