@@ -1,9 +1,8 @@
-use std::io;
-use std::process;
-
 use clap::Parser;
 use greppy::expression::Expression;
 use greppy::solver::Solver;
+use std::io;
+use std::process;
 
 #[derive(Parser)]
 struct Cli {
@@ -20,7 +19,8 @@ fn main() {
 
     let mut solver: Solver = Solver::new(expression, input);
     if solver.solve() {
-        solver.print_result();
+        let mut stdout = io::stdout();
+        solver.print_result(&mut stdout).unwrap();
         process::exit(0);
     }
     println!("No matches found");

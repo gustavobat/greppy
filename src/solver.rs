@@ -2,6 +2,7 @@ use crate::expression::Expression;
 use crate::size_hint::CalculateSizeHint;
 use crate::validation::Validation;
 use colored::Colorize;
+use std::io::Write;
 
 pub struct Solver {
     expression: Expression,
@@ -76,7 +77,7 @@ impl Solver {
         search_space
     }
 
-    pub fn print_result(&self) {
+    pub fn print_result(&self, mut writer: impl Write) -> std::io::Result<()> {
         let mut cur_pos = 0;
         for m in &self.matches {
             let start = m.start;
@@ -84,9 +85,10 @@ impl Solver {
             let prefix = &self.input[cur_pos..start];
             let matched = &self.input[start..end];
             cur_pos = end;
-            print!("{}{}", prefix, matched.red().bold());
+            write!(writer, "{}{}", prefix, matched.red().bold())?;
         }
-        println!("{}", &self.input[cur_pos..]);
+        writeln!(writer, "{}", &self.input[cur_pos..])?;
+        Ok(())
     }
 }
 
