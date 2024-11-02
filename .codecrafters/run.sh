@@ -6,4 +6,4 @@
 #
 # Learn more: https://codecrafters.io/program-interface
 
-exec /tmp/codecrafters-build-grep-rust/release/codecrafters-grep "$@"
+exec /tmp/target/release/greppy "$@"
