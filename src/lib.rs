@@ -1,5 +1,4 @@
 pub mod error;
-pub mod expression;
+pub mod matcher;
+pub mod regex;
 mod size_hint;
-pub mod solver;
-pub(crate) mod validation;

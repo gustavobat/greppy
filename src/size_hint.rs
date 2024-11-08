@@ -1,9 +1,13 @@
-use std::cmp::max;
 use std::cmp::Ordering;
 use std::ops::Add;
 
-use crate::expression::Expression;
-use crate::expression::Token;
+use crate::regex::Atom;
+use crate::regex::CharClass;
+use crate::regex::CharRange;
+use crate::regex::Expression;
+use crate::regex::Factor;
+use crate::regex::Regex;
+use crate::regex::Term;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SizeHint {
@@ -54,53 +58,89 @@ pub trait CalculateSizeHint {
     fn size_hint(&self) -> SizeHint;
 }
 
-impl CalculateSizeHint for Token {
+impl CalculateSizeHint for Regex {
     fn size_hint(&self) -> SizeHint {
-        match self {
-            Token::Tag(_) => SizeHint::Exact(1),
-            Token::Digit => SizeHint::Exact(1),
-            Token::AlphaNumeric => SizeHint::Exact(1),
-            Token::PosCharGroup(_) => SizeHint::Exact(1),
-            Token::NegCharGroup(_) => SizeHint::Exact(1),
-            Token::OneOrMore(_) => SizeHint::AtLeast(1),
-            Token::ZeroOrMore(_) => SizeHint::AtLeast(0),
-            Token::Wildcard => SizeHint::Exact(1),
-            Token::Alternation((a, b)) => {
-                let a_size = a.size_hint();
-                let b_size = b.size_hint();
-                max(a_size, b_size)
-            }
-        }
+        self.expression.size_hint()
     }
 }
 
 impl CalculateSizeHint for Expression {
     fn size_hint(&self) -> SizeHint {
-        self.tokens
-            .iter()
-            .fold(SizeHint::Exact(0), |acc, token| acc + token.size_hint())
+        match self {
+            Expression::Term(term) => term.size_hint(),
+            Expression::Alternation(left, right) => left.size_hint().max(right.size_hint()),
+        }
+    }
+}
+
+impl CalculateSizeHint for Term {
+    fn size_hint(&self) -> SizeHint {
+        match self {
+            Term::Factor(factor) => factor.size_hint(),
+            Term::Concatenation(left, right) => left.size_hint() + right.size_hint(),
+        }
+    }
+}
+
+impl CalculateSizeHint for Factor {
+    fn size_hint(&self) -> SizeHint {
+        match self {
+            Factor::Atom(atom) => atom.size_hint(),
+            Factor::ZeroOrOne(_) => SizeHint::AtLeast(0),
+            Factor::ZeroOrMore(_) => SizeHint::AtLeast(0),
+            Factor::OneOrMore(atom) => match atom.size_hint() {
+                SizeHint::Exact(size) => SizeHint::AtLeast(size),
+                SizeHint::AtLeast(size) => SizeHint::AtLeast(size),
+            },
+        }
+    }
+}
+
+impl CalculateSizeHint for Atom {
+    fn size_hint(&self) -> SizeHint {
+        match self {
+            Atom::Char(_) => SizeHint::Exact(1),
+            Atom::AnyChar => SizeHint::Exact(1),
+            Atom::NormalClass(_) => SizeHint::Exact(1),
+            Atom::NegatedClass(_) => SizeHint::Exact(1),
+            Atom::Parentheses(expr) => expr.size_hint(),
+        }
+    }
+}
+
+impl CalculateSizeHint for CharClass {
+    fn size_hint(&self) -> SizeHint {
+        SizeHint::Exact(1)
+    }
+}
+
+impl CalculateSizeHint for CharRange {
+    fn size_hint(&self) -> SizeHint {
+        SizeHint::Exact(1)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::regex::Regex;
     use std::str::FromStr;
     use test_case::test_case;
 
     #[test_case("a", SizeHint::Exact(1); "single char")]
     #[test_case("ab", SizeHint::Exact(2); "multiple chars")]
     #[test_case("12", SizeHint::Exact(2); "numeric chars")]
-    #[test_case("\\d", SizeHint::Exact(1); "digit token")]
-    #[test_case("\\w", SizeHint::Exact(1); "alphanumeric token")]
+    #[test_case("\\d", SizeHint::Exact(1); "digit char class")]
+    #[test_case("\\w", SizeHint::Exact(1); "alphanumeric char class")]
     #[test_case("[ab]", SizeHint::Exact(1); "positive char group")]
     #[test_case("[^ab]", SizeHint::Exact(1); "negative char group")]
     #[test_case("a+", SizeHint::AtLeast(1); "one or more")]
-    #[test_case("a?", SizeHint::AtLeast(0); "zero or more")]
+    #[test_case("a?", SizeHint::AtLeast(0); "zero or one")]
+    #[test_case("a*", SizeHint::AtLeast(0); "zero or more")]
     #[test_case(".", SizeHint::Exact(1); "wildcard")]
     #[test_case("(a|abc)", SizeHint::Exact(3); "alternation")]
-    fn test_size_hint(expression: &str, expected: SizeHint) {
-        let result = Expression::from_str(expression).unwrap();
+    fn test_size_hint(regex: &str, expected: SizeHint) {
+        let result = Regex::from_str(regex).unwrap();
         assert_eq!(result.size_hint(), expected);
     }
 
