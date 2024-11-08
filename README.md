@@ -1,3 +1,9 @@
+# greppy
+
+```sh 
+echo alph4-num3r1c | greppy -E "\w"
+```
+
 [![progress-banner](https://backend.codecrafters.io/progress/grep/589fab68-fdab-4d48-8563-b2c829ea201f)](https://app.codecrafters.io/users/codecrafters-bot?r=2qF)
 
 This is a starting point for Rust solutions to the
