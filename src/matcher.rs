@@ -45,7 +45,12 @@ impl Matcher {
         let search_space = self.gen_search_space();
         let mut matches: Vec<SourceSpan> = Vec::new();
         for (start, end) in search_space {
-            let substring = &self.input[start..end];
+            let substring = &self
+                .input
+                .chars()
+                .skip(start)
+                .take(end - start)
+                .collect::<String>();
             let mut state = validation::ValidationState::default();
             let res = &self.regex.expression.validate(substring, &mut state);
             if res.is_some() {
