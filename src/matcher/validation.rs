@@ -5,20 +5,25 @@ use crate::regex::Expression;
 use crate::regex::Factor;
 use crate::regex::Term;
 
+#[derive(Clone, Debug, Default)]
+pub struct ValidationState {
+    captured_groups: Vec<String>,
+}
+
 pub trait Validation {
-    fn validate<'a>(&self, input: &'a str) -> Option<&'a str>;
+    fn validate<'a>(&self, input: &'a str, state: &mut ValidationState) -> Option<&'a str>;
 }
 
 impl Validation for Expression {
-    fn validate<'a>(&self, input: &'a str) -> Option<&'a str> {
+    fn validate<'a>(&self, input: &'a str, state: &mut ValidationState) -> Option<&'a str> {
         match self {
-            Expression::Term(term) => term.validate(input),
+            Expression::Term(term) => term.validate(input, state),
             Expression::Alternation(term, expr) => {
-                let left = term.validate(input);
+                let left = term.validate(input, state);
                 if let Some(new_input) = left {
                     return Some(new_input);
                 }
-                let right = expr.validate(input);
+                let right = expr.validate(input, state);
                 if let Some(new_input) = right {
                     return Some(new_input);
                 }
@@ -29,30 +34,30 @@ impl Validation for Expression {
 }
 
 impl Validation for Term {
-    fn validate<'a>(&self, input: &'a str) -> Option<&'a str> {
+    fn validate<'a>(&self, input: &'a str, state: &mut ValidationState) -> Option<&'a str> {
         match self {
-            Term::Factor(factor) => factor.validate(input),
+            Term::Factor(factor) => factor.validate(input, state),
             Term::Concatenation(factor, term) => factor
-                .validate(input)
-                .and_then(|new_input| term.validate(new_input)),
+                .validate(input, state)
+                .and_then(|new_input| term.validate(new_input, state)),
         }
     }
 }
 
 impl Validation for Factor {
-    fn validate<'a>(&self, input: &'a str) -> Option<&'a str> {
+    fn validate<'a>(&self, input: &'a str, state: &mut ValidationState) -> Option<&'a str> {
         match self {
-            Factor::Atom(atom) => atom.validate(input),
-            Factor::ZeroOrOne(atom) => atom.validate(input).or(Some(input)),
+            Factor::Atom(atom) => atom.validate(input, state),
+            Factor::ZeroOrOne(atom) => atom.validate(input, state).or(Some(input)),
             Factor::ZeroOrMore(atom) => {
                 let mut current_input = input;
-                while let Some(new_input) = atom.validate(current_input) {
+                while let Some(new_input) = atom.validate(current_input, state) {
                     current_input = new_input;
                 }
                 Some(current_input)
             }
-            Factor::OneOrMore(atom) => atom.validate(input).map(|mut current_input| {
-                while let Some(new_input) = atom.validate(current_input) {
+            Factor::OneOrMore(atom) => atom.validate(input, state).map(|mut current_input| {
+                while let Some(new_input) = atom.validate(current_input, state) {
                     current_input = new_input;
                 }
                 current_input
@@ -62,31 +67,42 @@ impl Validation for Factor {
 }
 
 impl Validation for Atom {
-    fn validate<'a>(&self, input: &'a str) -> Option<&'a str> {
+    fn validate<'a>(&self, input: &'a str, state: &mut ValidationState) -> Option<&'a str> {
         match self {
             Atom::Char(c) => input.strip_prefix(*c),
             Atom::AnyChar => input.strip_prefix(|_| true),
-            Atom::Parentheses(expr) => expr.validate(input),
-            Atom::NormalClass(class) => class.validate(input),
+            Atom::Parentheses(expr) => {
+                let result = expr.validate(input, state);
+                if let Some(rest) = result {
+                    let captured = input[..input.len() - rest.len()].to_string();
+                    state.captured_groups.push(captured);
+                }
+                result
+            }
+            Atom::NormalClass(class) => class.validate(input, state),
             Atom::NegatedClass(class) => {
-                let new_input = class.validate(input);
+                let new_input = class.validate(input, state);
                 if new_input.is_some() {
                     None
                 } else {
                     Some(input)
                 }
             }
+            Atom::BackReference(n) => {
+                let group = state.captured_groups.get(*n - 1)?;
+                input.strip_prefix(group)
+            }
         }
     }
 }
 
 impl Validation for CharClass {
-    fn validate<'a>(&self, input: &'a str) -> Option<&'a str> {
+    fn validate<'a>(&self, input: &'a str, state: &mut ValidationState) -> Option<&'a str> {
         match self {
-            CharClass::CharRange(range) => range.validate(input),
-            CharClass::CharRangeClass(range, class) => {
-                range.validate(input).or_else(|| class.validate(input))
-            }
+            CharClass::CharRange(range) => range.validate(input, state),
+            CharClass::CharRangeClass(range, class) => range
+                .validate(input, state)
+                .or_else(|| class.validate(input, state)),
             CharClass::Alphanumeric => input.strip_prefix(|c: char| c.is_ascii_alphanumeric()),
             CharClass::Digit => input.strip_prefix(|c: char| c.is_ascii_digit()),
         }
@@ -94,7 +110,7 @@ impl Validation for CharClass {
 }
 
 impl Validation for CharRange {
-    fn validate<'a>(&self, input: &'a str) -> Option<&'a str> {
+    fn validate<'a>(&self, input: &'a str, _state: &mut ValidationState) -> Option<&'a str> {
         match self {
             CharRange::Char(c) => input.strip_prefix(*c),
             CharRange::CharRange(start, end) => {
@@ -228,5 +244,17 @@ mod tests {
         assert!(is_match(&regex, "a"));
         assert!(is_match(&regex, "b"));
         assert!(!is_match(&regex, "c"));
+    }
+
+    #[test]
+    fn test_back_reference() {
+        let regex = Regex::from_str("(a)\\1").unwrap();
+        assert!(is_match(&regex, "aa"));
+        assert!(!is_match(&regex, "ab"));
+
+        let regex = Regex::from_str("(\\w)\\1").unwrap();
+        assert!(is_match(&regex, "aa"));
+        assert!(is_match(&regex, "bb"));
+        assert!(!is_match(&regex, "ab"));
     }
 }

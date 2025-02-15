@@ -54,41 +54,48 @@ impl PartialOrd for SizeHint {
     }
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct SizeHintState {
+    pub(crate) captured_groups: Vec<SizeHint>,
+}
+
 pub trait CalculateSizeHint {
-    fn size_hint(&self) -> SizeHint;
+    fn size_hint(&self, state: &mut SizeHintState) -> SizeHint;
 }
 
 impl CalculateSizeHint for Regex {
-    fn size_hint(&self) -> SizeHint {
-        self.expression.size_hint()
+    fn size_hint(&self, state: &mut SizeHintState) -> SizeHint {
+        self.expression.size_hint(state)
     }
 }
 
 impl CalculateSizeHint for Expression {
-    fn size_hint(&self) -> SizeHint {
+    fn size_hint(&self, state: &mut SizeHintState) -> SizeHint {
         match self {
-            Expression::Term(term) => term.size_hint(),
-            Expression::Alternation(left, right) => left.size_hint().max(right.size_hint()),
+            Expression::Term(term) => term.size_hint(state),
+            Expression::Alternation(left, right) => {
+                left.size_hint(state).max(right.size_hint(state))
+            }
         }
     }
 }
 
 impl CalculateSizeHint for Term {
-    fn size_hint(&self) -> SizeHint {
+    fn size_hint(&self, state: &mut SizeHintState) -> SizeHint {
         match self {
-            Term::Factor(factor) => factor.size_hint(),
-            Term::Concatenation(left, right) => left.size_hint() + right.size_hint(),
+            Term::Factor(factor) => factor.size_hint(state),
+            Term::Concatenation(left, right) => left.size_hint(state) + right.size_hint(state),
         }
     }
 }
 
 impl CalculateSizeHint for Factor {
-    fn size_hint(&self) -> SizeHint {
+    fn size_hint(&self, state: &mut SizeHintState) -> SizeHint {
         match self {
-            Factor::Atom(atom) => atom.size_hint(),
+            Factor::Atom(atom) => atom.size_hint(state),
             Factor::ZeroOrOne(_) => SizeHint::AtLeast(0),
             Factor::ZeroOrMore(_) => SizeHint::AtLeast(0),
-            Factor::OneOrMore(atom) => match atom.size_hint() {
+            Factor::OneOrMore(atom) => match atom.size_hint(state) {
                 SizeHint::Exact(size) => SizeHint::AtLeast(size),
                 SizeHint::AtLeast(size) => SizeHint::AtLeast(size),
             },
@@ -97,25 +104,30 @@ impl CalculateSizeHint for Factor {
 }
 
 impl CalculateSizeHint for Atom {
-    fn size_hint(&self) -> SizeHint {
+    fn size_hint(&self, state: &mut SizeHintState) -> SizeHint {
         match self {
             Atom::Char(_) => SizeHint::Exact(1),
             Atom::AnyChar => SizeHint::Exact(1),
             Atom::NormalClass(_) => SizeHint::Exact(1),
             Atom::NegatedClass(_) => SizeHint::Exact(1),
-            Atom::Parentheses(expr) => expr.size_hint(),
+            Atom::Parentheses(expr) => {
+                let size_hint = expr.size_hint(state);
+                state.captured_groups.push(size_hint);
+                size_hint
+            }
+            Atom::BackReference(n) => state.captured_groups[*n - 1],
         }
     }
 }
 
 impl CalculateSizeHint for CharClass {
-    fn size_hint(&self) -> SizeHint {
+    fn size_hint(&self, _state: &mut SizeHintState) -> SizeHint {
         SizeHint::Exact(1)
     }
 }
 
 impl CalculateSizeHint for CharRange {
-    fn size_hint(&self) -> SizeHint {
+    fn size_hint(&self, _state: &mut SizeHintState) -> SizeHint {
         SizeHint::Exact(1)
     }
 }
@@ -141,7 +153,8 @@ mod tests {
     #[test_case("(a|abc)", SizeHint::Exact(3); "alternation")]
     fn test_size_hint(regex: &str, expected: SizeHint) {
         let result = Regex::from_str(regex).unwrap();
-        assert_eq!(result.size_hint(), expected);
+        let mut state = SizeHintState::default();
+        assert_eq!(result.size_hint(&mut state), expected);
     }
 
     #[test_case(SizeHint::Exact(1), SizeHint::Exact(1), Ordering::Equal; "exact equal")]

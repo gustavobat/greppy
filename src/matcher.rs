@@ -1,5 +1,6 @@
 use crate::regex::Regex;
 use crate::size_hint::CalculateSizeHint;
+use crate::size_hint::SizeHintState;
 use colored::Colorize;
 use std::io::Write;
 use validation::Validation;
@@ -45,7 +46,8 @@ impl Matcher {
         let mut matches: Vec<SourceSpan> = Vec::new();
         for (start, end) in search_space {
             let substring = &self.input[start..end];
-            let res = &self.regex.expression.validate(substring);
+            let mut state = validation::ValidationState::default();
+            let res = &self.regex.expression.validate(substring, &mut state);
             if res.is_some() {
                 let new_match = SourceSpan::new(start, end);
                 let last = matches.last_mut();
@@ -77,7 +79,8 @@ impl Matcher {
             0..self.input.len()
         };
 
-        let size_hint = self.regex.size_hint();
+        let mut state = SizeHintState::default();
+        let size_hint = self.regex.size_hint(&mut state);
 
         if self.regex.end_anchor {
             return starts

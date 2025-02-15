@@ -136,7 +136,11 @@ impl Parser<'_> {
                         Some(Err(token_error)) => Err(SyntaxError::InvalidToken(token_error)),
                     }
                 }
-                TokenKind::Escaped(_) => {
+                TokenKind::Escaped(c) => {
+                    if c.is_numeric() {
+                        self.lexer.next();
+                        return Ok(Atom::BackReference(c.to_digit(10).unwrap() as usize));
+                    };
                     let char_class = self.parse_char_class()?;
                     Ok(Atom::NormalClass(char_class))
                 }
@@ -176,6 +180,7 @@ impl Parser<'_> {
                 TokenKind::Char(_)
                 | TokenKind::Dot
                 | TokenKind::LeftParen
+                | TokenKind::Escaped(_)
                 | TokenKind::LeftBracket => {
                     let term = self.parse_term()?;
                     Ok(Term::Concatenation(factor, Box::new(term)))
@@ -263,6 +268,9 @@ mod tests {
                 Factor::Atom(Atom::Char('a'))
             )))))
         );
+
+        let mut parser = Parser::new("\\1");
+        assert_eq!(parser.parse_atom(), Ok(Atom::BackReference(1)));
     }
 
     #[test]

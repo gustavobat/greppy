@@ -40,6 +40,7 @@ pub(crate) enum Atom {
     Parentheses(Box<Expression>),
     NormalClass(CharClass),
     NegatedClass(CharClass),
+    BackReference(usize),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
