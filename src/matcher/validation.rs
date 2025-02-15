@@ -56,11 +56,11 @@ impl Validation for Factor {
                 }
                 Some(current_input)
             }
-            Factor::OneOrMore(atom) => atom.validate(input, state).map(|mut current_input| {
-                while let Some(new_input) = atom.validate(current_input, state) {
-                    current_input = new_input;
+            Factor::OneOrMore(atom) => atom.validate(input, state).map(|mut rest| {
+                while !rest.is_empty() && atom.validate(rest, state).is_some() {
+                    rest = atom.validate(rest, state).unwrap();
                 }
-                current_input
+                rest
             }),
         }
     }
@@ -83,10 +83,12 @@ impl Validation for Atom {
             Atom::NegatedClass(class) => {
                 let new_input = class.validate(input, state);
                 if new_input.is_some() {
-                    None
-                } else {
-                    Some(input)
+                    return None;
                 }
+                if !input.is_empty() {
+                    return Some(&input[1..]);
+                }
+                Some(input)
             }
             Atom::BackReference(n) => {
                 let group = state.captured_groups.get(*n - 1)?;
@@ -218,6 +220,11 @@ mod tests {
         assert!(is_match(&regex, "ab"));
         assert!(is_match(&regex, "abbbbb"));
         assert!(!is_match(&regex, "cbb"));
+
+        let regex = Regex::from_str("[^x]+").unwrap();
+        assert!(is_match(&regex, "a"));
+        assert!(is_match(&regex, "ab"));
+        assert!(!is_match(&regex, "x"));
     }
 
     #[test]
@@ -256,5 +263,16 @@ mod tests {
         assert!(is_match(&regex, "aa"));
         assert!(is_match(&regex, "bb"));
         assert!(!is_match(&regex, "ab"));
+    }
+
+    #[test]
+    fn test_utf8() {
+        let regex = Regex::from_str("🦀").unwrap();
+        assert!(is_match(&regex, "🦀"));
+        assert!(!is_match(&regex, "🦁"));
+
+        let regex = Regex::from_str("g.+gol").unwrap();
+        println!("{:?}", regex);
+        assert!(is_match(&regex, "goøö0Ogol"));
     }
 }
