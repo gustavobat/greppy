@@ -11,3 +11,6 @@ target/
 
 # JetBrains IDEs
 .idea/
+
+# cargo mutants results
+mutants.out*/*
