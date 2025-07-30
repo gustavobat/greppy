@@ -1,8 +1,9 @@
 [package]
 name = "greppy"
-authors = { workspace = true }
-version = { workspace = true }
-edition = { workspace = true }
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 regex = { workspace = true }
