@@ -1,9 +1,65 @@
 mod lexer;
+mod parser;
 
-pub fn match_pattern(input_line: &str, pattern: &str) -> bool {
-    if pattern.chars().count() == 1 {
-        input_line.contains(pattern)
-    } else {
-        panic!("Unhandled pattern: {pattern}")
+use parser::Parser;
+use parser::SyntaxError;
+use std::str::FromStr;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Regex {
+    pub(crate) expression: Expression,
+    pub(crate) start_anchor: bool,
+    pub(crate) end_anchor: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Expression {
+    Term(Term),
+    Alternation(Term, Box<Expression>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Term {
+    Factor(Factor),
+    Concatenation(Factor, Box<Term>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Factor {
+    Atom(Atom),
+    ZeroOrOne(Atom),
+    ZeroOrMore(Atom),
+    OneOrMore(Atom),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Atom {
+    Char(char),
+    Parentheses(Box<Expression>),
+    NormalClass(CharClass),
+    NegatedClass(CharClass),
+    BackReference(usize),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CharClass {
+    CharRange(CharRange),
+    CharRangeClass(CharRange, Box<CharClass>),
+    WordChar,
+    Digit,
+    AnyChar,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CharRange {
+    Char(char),
+    CharRange(char, char),
+}
+
+impl FromStr for Regex {
+    type Err = SyntaxError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Parser::new(s).parse()
     }
 }
