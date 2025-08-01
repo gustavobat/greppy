@@ -7,9 +7,9 @@ use std::str::FromStr;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Regex {
-    pub(crate) expression: Expression,
-    pub(crate) start_anchor: bool,
-    pub(crate) end_anchor: bool,
+    pub expression: Expression,
+    pub start_anchor: bool,
+    pub end_anchor: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
