@@ -4,6 +4,7 @@ mod validation;
 use crate::size_hint::CalculateSizeHint;
 use crate::size_hint::SizeHintState;
 use regex::Regex;
+use std::collections::BTreeMap;
 use std::collections::HashSet;
 use validation::Validation;
 
@@ -11,19 +12,15 @@ use validation::Validation;
 pub struct RegexMatch<'a> {
     pub original: &'a str,
     pub span: SourceSpan,
-    pub captured_groups: Vec<Option<SourceSpan>>,
+    pub captured_groups: BTreeMap<usize, SourceSpan>,
 }
 
 impl<'a> RegexMatch<'a> {
-    pub fn new(
-        original: &'a str,
-        span: SourceSpan,
-        captured_groups: Vec<Option<SourceSpan>>,
-    ) -> Self {
+    pub fn new(original: &'a str) -> Self {
         Self {
             original,
-            span,
-            captured_groups,
+            span: Default::default(),
+            captured_groups: Default::default(),
         }
     }
 
@@ -62,7 +59,7 @@ impl Matcher {
         let mut matches = HashSet::new();
         for span in search_space {
             let input = span.substr(&self.input);
-            let initial_match = RegexMatch::new(input, SourceSpan::default(), vec![]);
+            let initial_match = RegexMatch::new(input);
             let res = self.regex.validate(&initial_match);
             matches.extend(res.into_iter());
         }

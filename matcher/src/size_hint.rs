@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::collections::BTreeMap;
 use std::ops::Add;
 
 use regex::Atom;
@@ -56,7 +57,7 @@ impl PartialOrd for SizeHint {
 
 #[derive(Clone, Debug, Default)]
 pub struct SizeHintState {
-    pub(crate) captured_groups: Vec<Option<SizeHint>>,
+    pub(crate) captured_groups: BTreeMap<usize, SizeHint>,
 }
 
 pub trait CalculateSizeHint {
@@ -109,16 +110,14 @@ impl CalculateSizeHint for Atom {
             Atom::Char(_) => SizeHint::Exact(1),
             Atom::NormalClass(_) => SizeHint::Exact(1),
             Atom::NegatedClass(_) => SizeHint::Exact(1),
-            Atom::Parentheses(expr) => {
-                let n_entries = state.captured_groups.len();
-                // We push `None` since inner nested parentheses are evaluated recursively
-                // and the nesting level is implied by the length of `captured_groups`.
-                state.captured_groups.push(None);
+            Atom::Parentheses { id, expr } => {
                 let size_hint = expr.size_hint(state);
-                state.captured_groups[n_entries] = Some(size_hint);
+                state.captured_groups.insert(*id, size_hint);
                 size_hint
             }
-            Atom::BackReference(n) => state.captured_groups[*n - 1]
+            Atom::BackReference(n) => *state
+                .captured_groups
+                .get(n)
                 .expect("Backreferences must be resolved after their corresponding captured group"),
         }
     }

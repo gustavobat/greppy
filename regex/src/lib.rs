@@ -35,7 +35,7 @@ pub enum Factor {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Atom {
     Char(char),
-    Parentheses(Box<Expression>),
+    Parentheses { id: usize, expr: Box<Expression> },
     NormalClass(CharClass),
     NegatedClass(CharClass),
     BackReference(usize),

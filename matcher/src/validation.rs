@@ -99,17 +99,13 @@ impl Validation for Atom {
                     new.insert(old.clone().advance_end_by(1));
                 }
             }
-            Atom::Parentheses(expr) => {
-                // TODO improve
-                let n_entries = old.captured_groups.len();
-                let mut old_clone = old.clone();
-                old_clone.captured_groups.push(None);
-                let new_ref = expr.validate(&old_clone);
-                for mut new_match in new_ref.into_iter() {
+            Atom::Parentheses { id, expr } => {
+                for mut new_match in expr.validate(&old.clone()).into_iter() {
                     let new_start = old.span.end;
                     let new_end = new_match.span.end;
-                    new_match.captured_groups[n_entries] =
-                        Some(SourceSpan::new(new_start, new_end));
+                    new_match
+                        .captured_groups
+                        .insert(*id, SourceSpan::new(new_start, new_end));
                     new.insert(new_match);
                 }
             }
@@ -122,22 +118,20 @@ impl Validation for Atom {
                 }
             }
             Atom::BackReference(n) => {
-                // TODO improve
-                if let Some(group) = &old.captured_groups[*n - 1] {
-                    let captured = group.substr(old.original);
-                    let end_byte = old.span.end_byte(old.original);
-                    let new_end_byte = old
-                        .original
-                        .char_indices()
-                        .nth(old.span.end + group.len())
-                        .map(|(i, _)| i)
-                        .unwrap_or(old.original.len());
-                    let rest = &old.original[end_byte..new_end_byte];
-                    if rest == captured {
-                        new.insert(old.clone().advance_end_by(captured.len()));
-                    }
-                } else {
-                    todo!("HAHA")
+                let group = old.captured_groups.get(n).expect(
+                    "Backreferences must be resolved after their corresponding captured group",
+                );
+                let captured = group.substr(old.original);
+                let end_byte = old.span.end_byte(old.original);
+                let new_end_byte = old
+                    .original
+                    .char_indices()
+                    .nth(old.span.end + group.len())
+                    .map(|(i, _)| i)
+                    .unwrap_or(old.original.len());
+                let rest = &old.original[end_byte..new_end_byte];
+                if rest == captured {
+                    new.insert(old.clone().advance_end_by(captured.len()));
                 }
             }
         }

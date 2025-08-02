@@ -13,6 +13,7 @@ use thiserror::Error;
 #[derive(Debug, Clone)]
 pub(crate) struct Parser<'s> {
     lexer: Lexer<'s>,
+    capturing_group_counter: usize,
 }
 
 #[derive(Error, Clone, Debug, PartialEq, Eq)]
@@ -25,12 +26,15 @@ pub enum SyntaxError {
     UnexpectedEOF,
     #[error("Invalid atom start")]
     InvalidAtomStart,
+    #[error("Backreference {0} used before capturing group was defined")]
+    BackreferenceUsedBeforeCapture(usize),
 }
 
 impl Parser<'_> {
     pub fn new(input: &str) -> Parser {
         Parser {
             lexer: Lexer::new(input),
+            capturing_group_counter: 0,
         }
     }
 
@@ -119,11 +123,17 @@ impl Parser<'_> {
                 }
                 TokenKind::LeftParen => {
                     self.lexer.next();
+                    // backreferences are1-based, so the increment is done before the assignment
+                    self.capturing_group_counter += 1;
+                    let id = self.capturing_group_counter;
                     let expr = self.parse_expression()?;
                     match self.lexer.next() {
                         Some(Ok(token)) => {
                             if token.kind == TokenKind::RightParen {
-                                Ok(Atom::Parentheses(Box::new(expr)))
+                                Ok(Atom::Parentheses {
+                                    id,
+                                    expr: Box::new(expr),
+                                })
                             } else {
                                 Err(SyntaxError::Unexpected("')'".to_string(), token.kind))
                             }
@@ -160,7 +170,11 @@ impl Parser<'_> {
                 TokenKind::Escaped(c) => {
                     if c.is_numeric() {
                         self.lexer.next();
-                        return Ok(Atom::BackReference(c.to_digit(10).unwrap() as usize));
+                        let n = c.to_digit(10).unwrap() as usize;
+                        if n > self.capturing_group_counter {
+                            return Err(SyntaxError::BackreferenceUsedBeforeCapture(n));
+                        }
+                        return Ok(Atom::BackReference(n));
                     };
 
                     if c == 'n' {
@@ -303,13 +317,13 @@ mod tests {
         let mut parser = Parser::new("(a)");
         assert_eq!(
             parser.parse_atom(),
-            Ok(Atom::Parentheses(Box::new(Expression::Term(Term::Factor(
-                Factor::Atom(Atom::Char('a'))
-            )))))
+            Ok(Atom::Parentheses {
+                id: 1,
+                expr: Box::new(Expression::Term(Term::Factor(Factor::Atom(Atom::Char(
+                    'a'
+                )))))
+            })
         );
-
-        let mut parser = Parser::new("\\1");
-        assert_eq!(parser.parse_atom(), Ok(Atom::BackReference(1)));
     }
 
     #[test]
@@ -433,6 +447,39 @@ mod tests {
                 start_anchor: false,
                 end_anchor: false
             })
+        );
+    }
+
+    #[test]
+    fn backreference_before_capture() {
+        let mut parser = Parser::new(r"\1");
+        assert_eq!(
+            parser.parse(),
+            Err(SyntaxError::BackreferenceUsedBeforeCapture(1))
+        );
+
+        let mut parser = Parser::new(r"(a)\1");
+        assert_eq!(
+            parser.parse(),
+            Ok(Regex {
+                expression: Expression::Term(Term::Concatenation(
+                    Factor::Atom(Atom::Parentheses {
+                        id: 1,
+                        expr: Box::new(Expression::Term(Term::Factor(Factor::Atom(Atom::Char(
+                            'a'
+                        )))))
+                    }),
+                    Box::new(Term::Factor(Factor::Atom(Atom::BackReference(1))))
+                )),
+                start_anchor: false,
+                end_anchor: false
+            })
+        );
+
+        let mut parser = Parser::new(r"(a)\2");
+        assert_eq!(
+            parser.parse(),
+            Err(SyntaxError::BackreferenceUsedBeforeCapture(2))
         );
     }
 }
