@@ -10,5 +10,7 @@ rust-version = "1.88"
 
 [workspace.dependencies]
 regex = { path = "regex" }
+matcher = { path = "matcher" }
 thiserror = "2.0.12"
 test-case = "3.3.1"
+clap = { version = "4.5.42", features = ["derive"] }
