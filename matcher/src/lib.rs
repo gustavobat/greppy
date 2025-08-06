@@ -9,14 +9,14 @@ use std::collections::HashSet;
 use validation::Validation;
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
-pub struct RegexMatch<'a> {
-    pub original: &'a str,
+pub struct RegexMatch<'s> {
+    pub original: &'s str,
     pub span: SourceSpan,
     pub captured_groups: BTreeMap<usize, SourceSpan>,
 }
 
-impl<'a> RegexMatch<'a> {
-    pub fn new(original: &'a str) -> Self {
+impl<'s> RegexMatch<'s> {
+    pub fn new(original: &'s str) -> Self {
         Self {
             original,
             span: Default::default(),
@@ -37,28 +37,31 @@ impl<'a> RegexMatch<'a> {
     }
 }
 
-impl<'a> From<&RegexMatch<'a>> for HashSet<RegexMatch<'a>> {
-    fn from(value: &RegexMatch<'a>) -> Self {
+impl<'s> From<&RegexMatch<'s>> for HashSet<RegexMatch<'s>> {
+    fn from(value: &RegexMatch<'s>) -> Self {
         HashSet::from([value.clone()])
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Matcher {
-    regex: Regex,
-    input: String,
+pub struct Matcher<'e, 's> {
+    regex: &'e Regex,
+    input: &'s str,
 }
 
-impl Matcher {
-    pub fn new(regex: Regex, input: String) -> Self {
+impl<'e, 's> Matcher<'e, 's>
+where
+    'e: 's,
+{
+    pub fn new(regex: &'e Regex, input: &'e str) -> Self {
         Self { regex, input }
     }
 
-    pub fn solve(&self) -> HashSet<RegexMatch> {
+    pub fn solve(self) -> HashSet<RegexMatch<'s>> {
         let search_space = self.gen_search_space();
         let mut matches = HashSet::new();
         for span in search_space {
-            let input = span.substr(&self.input);
+            let input = span.substr(self.input);
             let initial_match = RegexMatch::new(input);
             let res = self.regex.validate(&initial_match);
             matches.extend(res.into_iter());

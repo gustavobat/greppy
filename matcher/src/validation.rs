@@ -198,7 +198,7 @@ mod tests {
     use std::str::FromStr;
 
     fn is_match(regex: &Regex, input: &str) -> bool {
-        let matcher = Matcher::new(regex.clone(), input.to_string());
+        let matcher = Matcher::new(regex, input);
         !matcher.solve().is_empty()
     }
 

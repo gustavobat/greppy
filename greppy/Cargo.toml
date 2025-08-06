@@ -6,6 +6,6 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-regex = { workspace = true }
-matcher = { workspace = true }
 clap = { workspace = true }
+matcher = { workspace = true }
+regex = { workspace = true }
