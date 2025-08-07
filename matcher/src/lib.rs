@@ -83,11 +83,12 @@ where
         };
 
         let mut state = SizeHintState::default();
-        let size_hint = self.regex.size_hint(&mut state);
+        let size_hints = self.regex.size_hint(&mut state);
 
-        if self.regex.end_anchor {
-            return starts
-                .filter_map(|start| {
+        let mut search_space = Vec::new();
+        for size_hint in size_hints {
+            if self.regex.end_anchor {
+                search_space.extend(starts.clone().filter_map(|start| {
                     let end = char_count;
                     let len = end - start;
                     if size_hint.is_compatible(len) {
@@ -95,16 +96,16 @@ where
                     } else {
                         None
                     }
-                })
-                .collect();
-        }
+                }));
+                continue;
+            }
 
-        let mut search_space = Vec::new();
-        for start in starts {
-            for end in start + 1..=char_count {
-                let len = end - start;
-                if size_hint.is_compatible(len) {
-                    search_space.push(SourceSpan { start, end });
+            for start in starts.clone() {
+                for end in start + 1..=char_count {
+                    let len = end - start;
+                    if size_hint.is_compatible(len) {
+                        search_space.push(SourceSpan { start, end });
+                    }
                 }
             }
         }

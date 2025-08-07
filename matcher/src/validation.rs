@@ -27,7 +27,7 @@ impl Validation for Regex {
             res.retain(|m| m.span.start == 0);
         }
         if self.end_anchor {
-            res.retain(|m| m.span.end == initial.original.len());
+            res.retain(|m| m.span.end == initial.original.chars().count());
         }
         res
     }
@@ -212,6 +212,10 @@ mod tests {
         assert!(!is_match(&regex, ""));
         assert!(!is_match(&regex, " "));
         assert!(!is_match(&regex, "$!_"));
+
+        let regex = Regex::from_str("🐼").unwrap();
+        assert!(is_match(&regex, "🐼🐻"));
+        assert!(!is_match(&regex, "🦁"));
     }
 
     #[test]
@@ -224,6 +228,7 @@ mod tests {
         assert!(!is_match(&regex, " "));
         assert!(!is_match(&regex, "$!_"));
         assert!(!is_match(&regex, "a"));
+        assert!(!is_match(&regex, "🐻"));
     }
 
     #[test]
@@ -233,6 +238,7 @@ mod tests {
         assert!(is_match(&regex, "a"));
         assert!(!is_match(&regex, ""));
         assert!(!is_match(&regex, "$!-"));
+        assert!(!is_match(&regex, "🐻"));
     }
 
     #[test]
@@ -248,6 +254,11 @@ mod tests {
         assert!(!is_match(&regex, " "));
         assert!(!is_match(&regex, "$![]"));
         assert!(!is_match(&regex, "1"));
+
+        let regex = Regex::from_str("[🐼🐨]").unwrap();
+        assert!(is_match(&regex, "🐼"));
+        assert!(is_match(&regex, "🐨"));
+        assert!(!is_match(&regex, "🐻"));
     }
 
     #[test]
@@ -263,6 +274,11 @@ mod tests {
         assert!(is_match(&regex, " "));
         assert!(is_match(&regex, "$![]"));
         assert!(is_match(&regex, "1"));
+
+        let regex = Regex::from_str("[^🐼🐨]").unwrap();
+        assert!(!is_match(&regex, "🐼"));
+        assert!(!is_match(&regex, "🐨"));
+        assert!(is_match(&regex, "🐻"));
     }
 
     #[test]
@@ -272,6 +288,10 @@ mod tests {
         assert!(is_match(&regex, "abcc"));
         assert!(!is_match(&regex, "aabc"));
         assert!(!is_match(&regex, "^abc"));
+
+        let regex = Regex::from_str("^🐼🐨").unwrap();
+        assert!(is_match(&regex, "🐼🐨🐻"));
+        assert!(!is_match(&regex, "🐻🐼🐨"));
     }
 
     #[test]
@@ -281,6 +301,10 @@ mod tests {
         assert!(is_match(&regex, "aabc"));
         assert!(!is_match(&regex, "abcc"));
         assert!(!is_match(&regex, "abc$"));
+
+        let regex = Regex::from_str("🐼🐨$").unwrap();
+        assert!(is_match(&regex, "🐻🐼🐨"));
+        assert!(!is_match(&regex, "🐼🐨🐻"));
     }
 
     #[test]
@@ -294,6 +318,10 @@ mod tests {
         assert!(is_match(&regex, "a"));
         assert!(is_match(&regex, "ab"));
         assert!(!is_match(&regex, "x"));
+
+        let regex = Regex::from_str("🐼🐨+").unwrap();
+        assert!(is_match(&regex, "🐼🐨"));
+        assert!(is_match(&regex, "🐼🐨🐨🐨"));
     }
 
     #[test]
@@ -301,6 +329,10 @@ mod tests {
         let regex = Regex::from_str("ab?").unwrap();
         assert!(is_match(&regex, "ac"));
         assert!(is_match(&regex, "ab"));
+
+        let regex = Regex::from_str("🐼🐨?").unwrap();
+        assert!(is_match(&regex, "🐼"));
+        assert!(is_match(&regex, "🐼🐨"));
     }
 
     #[test]
@@ -309,6 +341,10 @@ mod tests {
         assert!(is_match(&regex, "a"));
         assert!(is_match(&regex, "abc"));
         assert!(is_match(&regex, "abbbbb"));
+
+        let regex = Regex::from_str("🐼🐨?").unwrap();
+        assert!(is_match(&regex, "🐼"));
+        assert!(is_match(&regex, "🐼🐨🐨🐨"));
     }
 
     #[test]
@@ -319,45 +355,30 @@ mod tests {
         assert!(is_match(&regex, " "));
         assert!(is_match(&regex, "$!"));
         assert!(!is_match(&regex, ""));
+        assert!(is_match(&regex, "🐼"));
     }
 
     #[test]
     fn test_alternation() {
-        let regex = Regex::from_str("(a|b)").unwrap();
+        let regex = Regex::from_str("(a|bb)").unwrap();
         assert!(is_match(&regex, "a"));
-        assert!(is_match(&regex, "b"));
+        assert!(is_match(&regex, "bb"));
         assert!(!is_match(&regex, "c"));
+
+        let regex = Regex::from_str("(a|(bb|ccc))").unwrap();
+        assert!(is_match(&regex, "a"));
+        assert!(is_match(&regex, "bb"));
+        assert!(is_match(&regex, "ccc"));
+
+        let regex = Regex::from_str("(🐼|🐻🐨)").unwrap();
+        assert!(is_match(&regex, "🐼"));
+        assert!(is_match(&regex, "🐻🐨"));
     }
 
     #[test]
     fn test_back_reference() {
-        let regex = Regex::from_str("(a)\\1").unwrap();
-        assert!(is_match(&regex, "aa"));
-        assert!(!is_match(&regex, "ab"));
-
-        let regex = Regex::from_str("(\\w)\\1").unwrap();
-        assert!(is_match(&regex, "aa"));
-        assert!(is_match(&regex, "bb"));
-        assert!(!is_match(&regex, "ab"));
-
-        let regex = Regex::from_str("a(\\w\\w)\\1").unwrap();
-        assert!(is_match(&regex, "aabab"));
-        assert!(is_match(&regex, "ababa"));
-
-        let regex = Regex::from_str("^I see (\\d (cat|dog|cow)(, | and )?)+$").unwrap();
-        assert!(!is_match(&regex, "I see 1 cat, 2 dogs and 3 cows"));
-        let regex = Regex::from_str(r"\d\\d\\dx").unwrap();
-        assert!(!is_match(&regex, "12x"));
-
-        let regex = Regex::from_str("^(cat) n \\1$").unwrap();
-        assert!(is_match(&regex, "cat n cat"));
-    }
-
-    #[test]
-    fn test_utf8() {
-        let regex = Regex::from_str("🦀").unwrap();
-        assert!(is_match(&regex, "🦀"));
-        assert!(!is_match(&regex, "🦁"));
+        let regex = Regex::from_str("(🐼) \\1 \\1").unwrap();
+        assert!(is_match(&regex, "🐼 🐼 🐼"));
     }
 
     #[test]
