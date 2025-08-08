@@ -31,7 +31,7 @@ pub enum SyntaxError {
 }
 
 impl Parser<'_> {
-    pub fn new(input: &str) -> Parser {
+    pub fn new(input: &str) -> Parser<'_> {
         Parser {
             lexer: Lexer::new(input),
             capturing_group_counter: 0,
@@ -40,19 +40,19 @@ impl Parser<'_> {
 
     pub fn parse(&mut self) -> Result<Regex, SyntaxError> {
         let mut start_anchor = false;
-        if let Some(Ok(token)) = self.lexer.peek() {
-            if token.kind == TokenKind::Caret {
-                start_anchor = true;
-                self.lexer.next();
-            }
+        if let Some(Ok(token)) = self.lexer.peek()
+            && token.kind == TokenKind::Caret
+        {
+            start_anchor = true;
+            self.lexer.next();
         }
         let expression = self.parse_expression()?;
         let mut end_anchor = false;
-        if let Some(Ok(token)) = self.lexer.peek() {
-            if token.kind == TokenKind::DollarSign {
-                end_anchor = true;
-                self.lexer.next();
-            }
+        if let Some(Ok(token)) = self.lexer.peek()
+            && token.kind == TokenKind::DollarSign
+        {
+            end_anchor = true;
+            self.lexer.next();
         }
         Ok(Regex {
             expression,
@@ -73,12 +73,12 @@ impl Parser<'_> {
 
     fn parse_char_range(&mut self) -> Result<CharRange, SyntaxError> {
         let start = self.parse_single_char()?;
-        if let Some(Ok(token)) = self.lexer.peek() {
-            if token.kind == TokenKind::Minus {
-                self.lexer.next();
-                let end = self.parse_single_char()?;
-                return Ok(CharRange::CharRange(start, end));
-            }
+        if let Some(Ok(token)) = self.lexer.peek()
+            && token.kind == TokenKind::Minus
+        {
+            self.lexer.next();
+            let end = self.parse_single_char()?;
+            return Ok(CharRange::CharRange(start, end));
         }
         Ok(CharRange::Char(start))
     }
@@ -97,11 +97,11 @@ impl Parser<'_> {
             }
         }
         let char_range = self.parse_char_range()?;
-        if let Some(Ok(token)) = self.lexer.peek() {
-            if token.kind != TokenKind::RightBracket {
-                let char_class = self.parse_char_class()?;
-                return Ok(CharClass::CharRangeClass(char_range, Box::new(char_class)));
-            }
+        if let Some(Ok(token)) = self.lexer.peek()
+            && token.kind != TokenKind::RightBracket
+        {
+            let char_class = self.parse_char_class()?;
+            return Ok(CharClass::CharRangeClass(char_range, Box::new(char_class)));
         }
         Ok(CharClass::CharRange(char_range))
     }
@@ -145,11 +145,11 @@ impl Parser<'_> {
                 TokenKind::LeftBracket => {
                     self.lexer.next();
                     let mut negated = false;
-                    if let Some(Ok(token)) = self.lexer.peek() {
-                        if token.kind == TokenKind::Caret {
-                            self.lexer.next();
-                            negated = true;
-                        }
+                    if let Some(Ok(token)) = self.lexer.peek()
+                        && token.kind == TokenKind::Caret
+                    {
+                        self.lexer.next();
+                        negated = true;
                     }
                     let char_class = self.parse_char_class()?;
                     match self.lexer.next() {
