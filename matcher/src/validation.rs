@@ -100,8 +100,8 @@ impl Validation for Atom {
                 }
             }
             Atom::Parentheses { id, expr } => {
-                for mut new_match in expr.validate(&old.clone()).into_iter() {
-                    let new_start = old.span.end;
+                let new_start = old.span.end;
+                for mut new_match in expr.validate(old).into_iter() {
                     let new_end = new_match.span.end;
                     new_match
                         .captured_groups
@@ -124,14 +124,12 @@ impl Validation for Atom {
                 let captured = group.substr(old.original);
                 let end_byte = old.span.end_byte(old.original);
                 let new_end_byte = old
-                    .original
-                    .char_indices()
-                    .nth(old.span.end + group.len())
-                    .map(|(i, _)| i)
-                    .unwrap_or(old.original.len());
-                let rest = &old.original[end_byte..new_end_byte];
-                if rest == captured {
-                    new.insert(old.clone().advance_end_by(captured.len()));
+                    .span
+                    .advance_end_by(group.char_count())
+                    .end_byte(old.original);
+                let solved_ref = &old.original[end_byte..new_end_byte];
+                if solved_ref == captured {
+                    new.insert(old.clone().advance_end_by(group.char_count()));
                 }
             }
         }
@@ -377,6 +375,10 @@ mod tests {
 
     #[test]
     fn test_back_reference() {
+        let regex = Regex::from_str("(a)(\\w)\\1\\2").unwrap();
+        assert!(is_match(&regex, "aaaa"));
+        assert!(is_match(&regex, "abab"));
+
         let regex = Regex::from_str("(🐼) \\1 \\1").unwrap();
         assert!(is_match(&regex, "🐼 🐼 🐼"));
     }

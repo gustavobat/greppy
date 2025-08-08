@@ -113,6 +113,7 @@ where
     }
 }
 
+/// A span in the source string, represented as a range of character indices (not byte indices).
 #[derive(Clone, Debug, Default, Hash, Eq, PartialEq)]
 pub struct SourceSpan {
     pub start: usize,
@@ -126,17 +127,11 @@ impl SourceSpan {
     }
 
     pub fn start_byte(&self, s: &str) -> usize {
-        s.char_indices()
-            .nth(self.start)
-            .map(|(i, _)| i)
-            .unwrap_or(s.len())
+        s.chars().take(self.start).map(|c| c.len_utf8()).sum()
     }
 
     pub fn end_byte(&self, s: &str) -> usize {
-        s.char_indices()
-            .nth(self.end)
-            .map(|(i, _)| i)
-            .unwrap_or(s.len())
+        s.chars().take(self.end).map(|c| c.len_utf8()).sum()
     }
 
     pub fn substr<'a>(&self, s: &'a str) -> &'a str {
@@ -152,23 +147,15 @@ impl SourceSpan {
         self.end == other.start || other.end == self.start
     }
 
-    pub fn merge(&self, other: &SourceSpan) -> Option<SourceSpan> {
-        if self.intersects(other) || self.is_adjacent(other) {
-            Some(SourceSpan {
-                start: self.start.min(other.start),
-                end: self.end.max(other.end),
-            })
-        } else {
-            None
-        }
-    }
-
-    pub fn len(&self) -> usize {
+    pub fn char_count(&self) -> usize {
         self.end - self.start
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.start == self.end
+    pub fn advance_end_by(&self, n: usize) -> Self {
+        Self {
+            start: self.start,
+            end: self.end + n,
+        }
     }
 }
 
@@ -199,18 +186,5 @@ mod tests {
         let b = SourceSpan::new(b.0, b.1);
         assert_eq!(a.is_adjacent(&b), expected);
         assert_eq!(b.is_adjacent(&a), expected);
-    }
-
-    #[test_case((0, 5), (4, 10), Some((0, 10)); "point intersection")]
-    #[test_case((0, 5), (5, 10), Some((0, 10)); "disjoint adjacent")]
-    #[test_case((0, 5), (6, 10), None; "disjoint distant")]
-    #[test_case((0, 5), (3, 6), Some((0, 6)); "overlap")]
-    #[test_case((0, 5), (2, 3), Some((0, 5)); "b contained in a")]
-    fn test_merge(a: (usize, usize), b: (usize, usize), res: Option<(usize, usize)>) {
-        let a = SourceSpan::new(a.0, a.1);
-        let b = SourceSpan::new(b.0, b.1);
-        let res = res.map(|(start, end)| SourceSpan::new(start, end));
-        assert_eq!(a.merge(&b), res);
-        assert_eq!(b.merge(&a), res);
     }
 }
