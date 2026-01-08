@@ -10,6 +10,7 @@ use regex::Expression;
 use regex::Factor;
 use regex::Regex;
 use regex::Term;
+use regex::UpperBound;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SizeHint {
@@ -109,18 +110,39 @@ impl CalculateSizeHint for Term {
 
 impl CalculateSizeHint for Factor {
     fn size_hint(&self, state: &mut SizeHintState) -> HashSet<SizeHint> {
-        match self {
-            Factor::Atom(atom) => atom.size_hint(state),
-            Factor::ZeroOrOne(_) => HashSet::from([SizeHint::AtLeast(0)]),
-            Factor::ZeroOrMore(_) => HashSet::from([SizeHint::AtLeast(0)]),
-            Factor::OneOrMore(atom) => {
-                let atom_results = atom.size_hint(state);
-                let min_inner = atom_results
-                    .iter()
-                    .min()
-                    .expect("Atom size hint should never be empty")
-                    .inner();
-                HashSet::from([SizeHint::AtLeast(min_inner)])
+        if self.min == 0 {
+            return HashSet::from([SizeHint::AtLeast(0)]);
+        }
+
+        let atom_hints = self.atom.size_hint(state);
+        if self.min == 1 && self.max == UpperBound::Exactly(1) {
+            return atom_hints;
+        }
+
+        let min_atom_size = atom_hints
+            .iter()
+            .min()
+            .expect("Atom size hint should never be empty")
+            .inner();
+
+        match self.max {
+            UpperBound::Unbounded => HashSet::from([SizeHint::AtLeast(self.min * min_atom_size)]),
+            UpperBound::Exactly(max) if max > self.min => {
+                HashSet::from([SizeHint::AtLeast(self.min * min_atom_size)])
+            }
+            UpperBound::Exactly(_) => {
+                // If all atom hints are Exact, we produce Exact hints
+                if atom_hints.iter().all(|h| matches!(h, SizeHint::Exact(_))) {
+                    atom_hints
+                        .iter()
+                        .map(|h| {
+                            let size = h.inner();
+                            SizeHint::Exact(self.min * size)
+                        })
+                        .collect()
+                } else {
+                    HashSet::from([SizeHint::AtLeast(self.min * min_atom_size)])
+                }
             }
         }
     }

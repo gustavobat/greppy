@@ -5,6 +5,7 @@ use crate::Expression;
 use crate::Factor;
 use crate::Regex;
 use crate::Term;
+use crate::UpperBound;
 use crate::lexer::Lexer;
 use crate::lexer::TokenError;
 use crate::lexer::TokenKind;
@@ -207,19 +208,39 @@ impl Parser<'_> {
             Some(Ok(token)) => match token.kind {
                 TokenKind::QuestionMark => {
                     self.lexer.next();
-                    Ok(Factor::ZeroOrOne(atom))
+                    Ok(Factor {
+                        atom,
+                        min: 0,
+                        max: UpperBound::Exactly(1),
+                    })
                 }
                 TokenKind::Star => {
                     self.lexer.next();
-                    Ok(Factor::ZeroOrMore(atom))
+                    Ok(Factor {
+                        atom,
+                        min: 0,
+                        max: UpperBound::Unbounded,
+                    })
                 }
                 TokenKind::Plus => {
                     self.lexer.next();
-                    Ok(Factor::OneOrMore(atom))
+                    Ok(Factor {
+                        atom,
+                        min: 1,
+                        max: UpperBound::Unbounded,
+                    })
                 }
-                _ => Ok(Factor::Atom(atom)),
+                _ => Ok(Factor {
+                    atom,
+                    min: 1,
+                    max: UpperBound::Exactly(1),
+                }),
             },
-            None => Ok(Factor::Atom(atom)),
+            None => Ok(Factor {
+                atom,
+                min: 1,
+                max: UpperBound::Exactly(1),
+            }),
             Some(Err(token_error)) => Err(SyntaxError::InvalidToken(token_error.clone())),
         }
     }
@@ -319,9 +340,11 @@ mod tests {
             parser.parse_atom(),
             Ok(Atom::Parentheses {
                 id: 1,
-                expr: Box::new(Expression::Term(Term::Factor(Factor::Atom(Atom::Char(
-                    'a'
-                )))))
+                expr: Box::new(Expression::Term(Term::Factor(Factor {
+                    atom: Atom::Char('a'),
+                    min: 1,
+                    max: UpperBound::Exactly(1),
+                })))
             })
         );
     }
@@ -331,34 +354,57 @@ mod tests {
         let mut parser = Parser::new("a?");
         assert_eq!(
             parser.parse_factor(),
-            Ok(Factor::ZeroOrOne(Atom::Char('a')))
+            Ok(Factor {
+                atom: Atom::Char('a'),
+                min: 0,
+                max: UpperBound::Exactly(1),
+            })
         );
 
         let mut parser = Parser::new("a*");
         assert_eq!(
             parser.parse_factor(),
-            Ok(Factor::ZeroOrMore(Atom::Char('a')))
+            Ok(Factor {
+                atom: Atom::Char('a'),
+                min: 0,
+                max: UpperBound::Unbounded,
+            })
         );
 
         let mut parser = Parser::new("a+");
         assert_eq!(
             parser.parse_factor(),
-            Ok(Factor::OneOrMore(Atom::Char('a')))
+            Ok(Factor {
+                atom: Atom::Char('a'),
+                min: 1,
+                max: UpperBound::Unbounded,
+            })
         );
 
         let mut parser = Parser::new("a");
-        assert_eq!(parser.parse_factor(), Ok(Factor::Atom(Atom::Char('a'))));
+        assert_eq!(
+            parser.parse_factor(),
+            Ok(Factor {
+                atom: Atom::Char('a'),
+                min: 1,
+                max: UpperBound::Exactly(1),
+            })
+        );
 
         let mut parser = Parser::new("[abc]");
         assert_eq!(
             parser.parse_factor(),
-            Ok(Factor::Atom(Atom::NormalClass(CharClass::CharRangeClass(
-                CharRange::Char('a'),
-                Box::new(CharClass::CharRangeClass(
-                    CharRange::Char('b'),
-                    Box::new(CharClass::CharRange(CharRange::Char('c')))
-                ))
-            ))))
+            Ok(Factor {
+                atom: Atom::NormalClass(CharClass::CharRangeClass(
+                    CharRange::Char('a'),
+                    Box::new(CharClass::CharRangeClass(
+                        CharRange::Char('b'),
+                        Box::new(CharClass::CharRange(CharRange::Char('c')))
+                    ))
+                )),
+                min: 1,
+                max: UpperBound::Exactly(1),
+            })
         );
     }
 
@@ -368,10 +414,22 @@ mod tests {
         assert_eq!(
             parser.parse_term(),
             Ok(Term::Concatenation(
-                Factor::Atom(Atom::Char('a')),
+                Factor {
+                    atom: Atom::Char('a'),
+                    min: 1,
+                    max: UpperBound::Exactly(1),
+                },
                 Box::new(Term::Concatenation(
-                    Factor::Atom(Atom::NormalClass(CharClass::AnyChar)),
-                    Box::new(Term::Factor(Factor::Atom(Atom::Char('b'))))
+                    Factor {
+                        atom: Atom::NormalClass(CharClass::AnyChar),
+                        min: 1,
+                        max: UpperBound::Exactly(1),
+                    },
+                    Box::new(Term::Factor(Factor {
+                        atom: Atom::Char('b'),
+                        min: 1,
+                        max: UpperBound::Exactly(1),
+                    }))
                 ))
             ))
         );
@@ -379,7 +437,11 @@ mod tests {
         let mut parser = Parser::new("a");
         assert_eq!(
             parser.parse_term(),
-            Ok(Term::Factor(Factor::Atom(Atom::Char('a'))))
+            Ok(Term::Factor(Factor {
+                atom: Atom::Char('a'),
+                min: 1,
+                max: UpperBound::Exactly(1),
+            }))
         );
     }
 
@@ -388,19 +450,27 @@ mod tests {
         let mut parser = Parser::new("a");
         assert_eq!(
             parser.parse_expression(),
-            Ok(Expression::Term(Term::Factor(Factor::Atom(Atom::Char(
-                'a'
-            )))))
+            Ok(Expression::Term(Term::Factor(Factor {
+                atom: Atom::Char('a'),
+                min: 1,
+                max: UpperBound::Exactly(1),
+            })))
         );
 
         let mut parser = Parser::new("a|b");
         assert_eq!(
             parser.parse_expression(),
             Ok(Expression::Alternation(
-                Term::Factor(Factor::Atom(Atom::Char('a'))),
-                Box::new(Expression::Term(Term::Factor(Factor::Atom(Atom::Char(
-                    'b'
-                )))))
+                Term::Factor(Factor {
+                    atom: Atom::Char('a'),
+                    min: 1,
+                    max: UpperBound::Exactly(1),
+                }),
+                Box::new(Expression::Term(Term::Factor(Factor {
+                    atom: Atom::Char('b'),
+                    min: 1,
+                    max: UpperBound::Exactly(1),
+                })))
             ))
         );
     }
@@ -411,7 +481,11 @@ mod tests {
         assert_eq!(
             parser.parse(),
             Ok(Regex {
-                expression: Expression::Term(Term::Factor(Factor::Atom(Atom::Char('a')))),
+                expression: Expression::Term(Term::Factor(Factor {
+                    atom: Atom::Char('a'),
+                    min: 1,
+                    max: UpperBound::Exactly(1),
+                })),
                 start_anchor: false,
                 end_anchor: false
             })
@@ -421,7 +495,11 @@ mod tests {
         assert_eq!(
             parser.parse(),
             Ok(Regex {
-                expression: Expression::Term(Term::Factor(Factor::Atom(Atom::Char('a')))),
+                expression: Expression::Term(Term::Factor(Factor {
+                    atom: Atom::Char('a'),
+                    min: 1,
+                    max: UpperBound::Exactly(1),
+                })),
                 start_anchor: true,
                 end_anchor: true
             })
@@ -435,12 +513,28 @@ mod tests {
             parser.parse(),
             Ok(Regex {
                 expression: Expression::Term(Term::Concatenation(
-                    Factor::Atom(Atom::NormalClass(CharClass::Digit)),
+                    Factor {
+                        atom: Atom::NormalClass(CharClass::Digit),
+                        min: 1,
+                        max: UpperBound::Exactly(1),
+                    },
                     Box::new(Term::Concatenation(
-                        Factor::Atom(Atom::Char('\n')),
+                        Factor {
+                            atom: Atom::Char('\n'),
+                            min: 1,
+                            max: UpperBound::Exactly(1),
+                        },
                         Box::new(Term::Concatenation(
-                            Factor::Atom(Atom::Char('\\')),
-                            Box::new(Term::Factor(Factor::Atom(Atom::Char('a'))))
+                            Factor {
+                                atom: Atom::Char('\\'),
+                                min: 1,
+                                max: UpperBound::Exactly(1),
+                            },
+                            Box::new(Term::Factor(Factor {
+                                atom: Atom::Char('a'),
+                                min: 1,
+                                max: UpperBound::Exactly(1),
+                            }))
                         ))
                     ))
                 )),
@@ -463,13 +557,23 @@ mod tests {
             parser.parse(),
             Ok(Regex {
                 expression: Expression::Term(Term::Concatenation(
-                    Factor::Atom(Atom::Parentheses {
-                        id: 1,
-                        expr: Box::new(Expression::Term(Term::Factor(Factor::Atom(Atom::Char(
-                            'a'
-                        )))))
-                    }),
-                    Box::new(Term::Factor(Factor::Atom(Atom::BackReference(1))))
+                    Factor {
+                        atom: Atom::Parentheses {
+                            id: 1,
+                            expr: Box::new(Expression::Term(Term::Factor(Factor {
+                                atom: Atom::Char('a'),
+                                min: 1,
+                                max: UpperBound::Exactly(1),
+                            })))
+                        },
+                        min: 1,
+                        max: UpperBound::Exactly(1),
+                    },
+                    Box::new(Term::Factor(Factor {
+                        atom: Atom::BackReference(1),
+                        min: 1,
+                        max: UpperBound::Exactly(1),
+                    }))
                 )),
                 start_anchor: false,
                 end_anchor: false

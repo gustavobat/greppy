@@ -25,11 +25,40 @@ pub enum Term {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Factor {
-    Atom(Atom),
-    ZeroOrOne(Atom),
-    ZeroOrMore(Atom),
-    OneOrMore(Atom),
+pub enum UpperBound {
+    Exactly(usize),
+    Unbounded,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Factor {
+    pub atom: Atom,
+    pub min: usize,
+    pub max: UpperBound,
+}
+
+impl Factor {
+    /// Creates a new Factor, ensuring that max >= min (when max is bounded)
+    pub fn new(atom: Atom, min: usize, max: UpperBound) -> Self {
+        // Validate invariant: if max is Exactly(n), then n >= min
+        if let UpperBound::Exactly(max_val) = max {
+            debug_assert!(
+                max_val >= min,
+                "Factor max ({}) must be >= min ({})",
+                max_val,
+                min
+            );
+        }
+        Self { atom, min, max }
+    }
+
+    /// Returns true if this Factor has valid bounds
+    pub fn is_valid(&self) -> bool {
+        match self.max {
+            UpperBound::Exactly(max_val) => max_val >= self.min,
+            UpperBound::Unbounded => true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

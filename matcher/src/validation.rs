@@ -7,6 +7,7 @@ use regex::Expression;
 use regex::Factor;
 use regex::Regex;
 use regex::Term;
+use regex::UpperBound;
 use std::collections::HashSet;
 
 pub trait Validation {
@@ -57,33 +58,31 @@ impl Validation for Term {
 
 impl Validation for Factor {
     fn validate<'a>(&self, old: &RegexMatch<'a>) -> HashSet<RegexMatch<'a>> {
-        match self {
-            Factor::Atom(atom) => atom.validate(old),
-            Factor::ZeroOrOne(atom) => {
-                let mut new = atom.validate(old);
-                new.insert(old.clone());
-                new
+        let mut new = HashSet::new();
+        let mut current_matches = HashSet::from([old.clone()]);
+
+        let mut count = 0;
+        loop {
+            // Start adding results when min is reached
+            if count >= self.min {
+                new.extend(current_matches.clone());
             }
-            Factor::ZeroOrMore(atom) => {
-                let mut new = HashSet::new();
-                let mut current_input = HashSet::from([old.clone()]);
-                while !current_input.is_empty() {
-                    current_input = atom.validate_all(current_input);
-                    new.extend(current_input.clone());
-                }
-                new.insert(old.clone());
-                new
+
+            match self.max {
+                UpperBound::Exactly(max) if count >= max => break,
+                UpperBound::Unbounded if current_matches.is_empty() => break,
+                _ => {}
             }
-            Factor::OneOrMore(atom) => {
-                let mut new = HashSet::new();
-                let mut current_input = HashSet::from([old.clone()]);
-                while !current_input.is_empty() {
-                    current_input = atom.validate_all(current_input);
-                    new.extend(current_input.clone());
-                }
-                new
+
+            current_matches = self.atom.validate_all(current_matches);
+            count += 1;
+
+            // Stop early if no match is found
+            if current_matches.is_empty() {
+                break;
             }
         }
+        new
     }
 }
 
