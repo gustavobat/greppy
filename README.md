@@ -10,10 +10,10 @@ A Rust implementation of a `grep`-like tool, originally built as a solution for
 - Positive/negative char groups,
 - Start and end anchors,
 - Quantifiers,
+- Ranges: `a{2}`, `a{2,4}` or `a{2,}`,
 - Capture groups & backreferences.
 
 ## Missing features
-- Ranges: `a{2,3}`,
 - Word boundary: `\b`,
 - _Non_-classes: `\W, \D, \B`
 

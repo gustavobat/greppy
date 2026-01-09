@@ -29,6 +29,10 @@ pub enum SyntaxError {
     InvalidAtomStart,
     #[error("Backreference {0} used before capturing group was defined")]
     BackreferenceUsedBeforeCapture(usize),
+    #[error("Invalid quantifier range: max ({0}) must be >= min ({1})")]
+    InvalidQuantifierRange(usize, usize),
+    #[error("Invalid number format in range definition")]
+    InvalidNumberFormatInRangeDefinition,
 }
 
 impl Parser<'_> {
@@ -202,6 +206,31 @@ impl Parser<'_> {
         }
     }
 
+    fn parse_number(&mut self) -> Result<usize, SyntaxError> {
+        let mut digits = String::new();
+
+        while let Some(Ok(token)) = self.lexer.peek() {
+            if let TokenKind::Char(c) = token.kind {
+                if c.is_ascii_digit() {
+                    digits.push(c);
+                    self.lexer.next();
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+
+        if digits.is_empty() {
+            return Err(SyntaxError::InvalidNumberFormatInRangeDefinition);
+        }
+
+        digits
+            .parse::<usize>()
+            .map_err(|_| SyntaxError::InvalidNumberFormatInRangeDefinition)
+    }
+
     fn parse_factor(&mut self) -> Result<Factor, SyntaxError> {
         let atom = self.parse_atom()?;
         match self.lexer.peek() {
@@ -229,6 +258,47 @@ impl Parser<'_> {
                         min: 1,
                         max: UpperBound::Unbounded,
                     })
+                }
+                TokenKind::LeftBrace => {
+                    self.lexer.next();
+                    let min = self.parse_number()?;
+
+                    let max = if let Some(Ok(token)) = self.lexer.peek() {
+                        if let TokenKind::Char(',') = token.kind {
+                            self.lexer.next();
+
+                            if let Some(Ok(token)) = self.lexer.peek() {
+                                if token.kind == TokenKind::RightBrace {
+                                    UpperBound::Unbounded
+                                } else {
+                                    let max_val = self.parse_number()?;
+                                    if max_val < min {
+                                        return Err(SyntaxError::InvalidQuantifierRange(
+                                            max_val, min,
+                                        ));
+                                    }
+                                    UpperBound::Exactly(max_val)
+                                }
+                            } else {
+                                return Err(SyntaxError::UnexpectedEOF);
+                            }
+                        } else {
+                            UpperBound::Exactly(min)
+                        }
+                    } else {
+                        return Err(SyntaxError::UnexpectedEOF);
+                    };
+
+                    match self.lexer.next() {
+                        Some(Ok(token)) if token.kind == TokenKind::RightBrace => {
+                            Ok(Factor { atom, min, max })
+                        }
+                        Some(Ok(token)) => {
+                            Err(SyntaxError::Unexpected("'}'".to_string(), token.kind))
+                        }
+                        Some(Err(e)) => Err(SyntaxError::InvalidToken(e)),
+                        None => Err(SyntaxError::UnexpectedEOF),
+                    }
                 }
                 _ => Ok(Factor {
                     atom,
@@ -584,6 +654,107 @@ mod tests {
         assert_eq!(
             parser.parse(),
             Err(SyntaxError::BackreferenceUsedBeforeCapture(2))
+        );
+    }
+
+    #[test]
+    fn test_parse_quantifier_exact() {
+        let mut parser = Parser::new("a{3}");
+        assert_eq!(
+            parser.parse_factor(),
+            Ok(Factor {
+                atom: Atom::Char('a'),
+                min: 3,
+                max: UpperBound::Exactly(3),
+            })
+        );
+    }
+
+    #[test]
+    fn test_parse_quantifier_at_least() {
+        let mut parser = Parser::new("a{2,}");
+        assert_eq!(
+            parser.parse_factor(),
+            Ok(Factor {
+                atom: Atom::Char('a'),
+                min: 2,
+                max: UpperBound::Unbounded,
+            })
+        );
+    }
+
+    #[test]
+    fn test_parse_quantifier_range() {
+        let mut parser = Parser::new("a{1,5}");
+        assert_eq!(
+            parser.parse_factor(),
+            Ok(Factor {
+                atom: Atom::Char('a'),
+                min: 1,
+                max: UpperBound::Exactly(5),
+            })
+        );
+    }
+
+    #[test]
+    fn test_parse_quantifier_invalid_range() {
+        let mut parser = Parser::new("a{5,2}");
+        assert_eq!(
+            parser.parse_factor(),
+            Err(SyntaxError::InvalidQuantifierRange(2, 5))
+        );
+    }
+
+    #[test]
+    fn test_parse_quantifier_invalid_syntax() {
+        let mut parser = Parser::new("a{5,)}");
+        assert_eq!(
+            parser.parse_factor(),
+            Err(SyntaxError::InvalidNumberFormatInRangeDefinition)
+        );
+    }
+
+    #[test]
+    fn test_parse_quantifier_zero() {
+        let mut parser = Parser::new("a{0,3}");
+        assert_eq!(
+            parser.parse_factor(),
+            Ok(Factor {
+                atom: Atom::Char('a'),
+                min: 0,
+                max: UpperBound::Exactly(3),
+            })
+        );
+    }
+
+    #[test]
+    fn test_parse_complex_with_quantifiers() {
+        let mut parser = Parser::new("ab{2,4}c");
+        assert_eq!(
+            parser.parse(),
+            Ok(Regex {
+                expression: Expression::Term(Term::Concatenation(
+                    Factor {
+                        atom: Atom::Char('a'),
+                        min: 1,
+                        max: UpperBound::Exactly(1),
+                    },
+                    Box::new(Term::Concatenation(
+                        Factor {
+                            atom: Atom::Char('b'),
+                            min: 2,
+                            max: UpperBound::Exactly(4),
+                        },
+                        Box::new(Term::Factor(Factor {
+                            atom: Atom::Char('c'),
+                            min: 1,
+                            max: UpperBound::Exactly(1),
+                        }))
+                    ))
+                )),
+                start_anchor: false,
+                end_anchor: false
+            })
         );
     }
 }

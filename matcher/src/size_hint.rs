@@ -119,32 +119,14 @@ impl CalculateSizeHint for Factor {
             return atom_hints;
         }
 
+        // For any quantified expression (min > 1 or max != min), return simplified
+        // AtLeast calculation. This avoids combinatorial explosion for cases like (ab|c){20}
         let min_atom_size = atom_hints
             .iter()
             .min()
             .expect("Atom size hint should never be empty")
             .inner();
-
-        match self.max {
-            UpperBound::Unbounded => HashSet::from([SizeHint::AtLeast(self.min * min_atom_size)]),
-            UpperBound::Exactly(max) if max > self.min => {
-                HashSet::from([SizeHint::AtLeast(self.min * min_atom_size)])
-            }
-            UpperBound::Exactly(_) => {
-                // If all atom hints are Exact, we produce Exact hints
-                if atom_hints.iter().all(|h| matches!(h, SizeHint::Exact(_))) {
-                    atom_hints
-                        .iter()
-                        .map(|h| {
-                            let size = h.inner();
-                            SizeHint::Exact(self.min * size)
-                        })
-                        .collect()
-                } else {
-                    HashSet::from([SizeHint::AtLeast(self.min * min_atom_size)])
-                }
-            }
-        }
+        HashSet::from([SizeHint::AtLeast(self.min * min_atom_size)])
     }
 }
 
@@ -238,6 +220,7 @@ mod tests {
     #[test_case(".", &[SizeHint::Exact(1)]; "wildcard")]
     #[test_case("(ab|(abc|abcd))", &[SizeHint::Exact(2), SizeHint::Exact(3), SizeHint::Exact(4)]; "alternation")]
     #[test_case("(abc)\\1", &[SizeHint::Exact(6)]; "backreference")]
+    #[test_case("(a|bc){2}", &[SizeHint::AtLeast(2)]; "alternated range")]
     fn test_size_hint(regex: &str, expected: &[SizeHint]) {
         let result = Regex::from_str(regex).unwrap();
         let mut state = SizeHintState::default();
