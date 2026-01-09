@@ -387,4 +387,24 @@ mod tests {
         let regex = Regex::from_str("((c)\\2)\\1").unwrap();
         assert!(is_match(&regex, "cccc"));
     }
+
+    #[test]
+    fn test_ranged_quantifiers() {
+        let regex = Regex::from_str("ab{2}c").unwrap();
+        assert!(!is_match(&regex, "abc"));
+        assert!(is_match(&regex, "abbc"));
+        assert!(!is_match(&regex, "abbbc"));
+
+        let regex = Regex::from_str("ab{2,}c").unwrap();
+        assert!(!is_match(&regex, "abc"));
+        assert!(is_match(&regex, "abbc"));
+        assert!(is_match(&regex, "abbbc"));
+        assert!(is_match(&regex, "abbbbc"));
+
+        let regex = Regex::from_str("ab{2,3}c").unwrap();
+        assert!(!is_match(&regex, "abc"));
+        assert!(is_match(&regex, "abbc"));
+        assert!(is_match(&regex, "abbbc"));
+        assert!(!is_match(&regex, "abbbbc"));
+    }
 }
