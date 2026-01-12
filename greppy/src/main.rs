@@ -2,6 +2,7 @@ use clap::Parser;
 use matcher::Matcher;
 use regex::Regex;
 use std::io;
+use std::io::BufRead;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -15,17 +16,25 @@ struct Cli {
 }
 
 fn solve_from_stdin(expression: &Regex) -> bool {
-    let mut stdin_buffer = String::new();
-    if io::stdin().read_line(&mut stdin_buffer).is_err() {
+    let stdin = io::stdin();
+    let mut lines = stdin.lock().lines().peekable();
+
+    if lines.peek().is_none() {
         eprintln!("No input data received. Please provide an input file or pipe data to stdin.");
         return false;
+    };
+
+    let mut match_found = false;
+    for line in lines {
+        if let Ok(line) = line {
+            if !Matcher::new(expression, &line).solve().is_empty() {
+                println!("{}", line);
+                match_found = true;
+            }
+        }
     }
-    let solution = Matcher::new(expression, &stdin_buffer).solve();
-    if !solution.is_empty() {
-        println!("{stdin_buffer}");
-        return true;
-    }
-    false
+
+    match_found
 }
 
 fn solve_file(expression: &Regex, file: &PathBuf, multiple: bool) -> bool {
