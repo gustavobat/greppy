@@ -6,6 +6,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-clap = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
 matcher = { workspace = true }
+owo-colors = { workspace = true, features = ["supports-colors"] }
 regex = { workspace = true }

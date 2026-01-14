@@ -35,6 +35,18 @@ impl<'s> RegexMatch<'s> {
             captured_groups: self.captured_groups,
         }
     }
+
+    pub fn view(&self) -> &str {
+        &self.original[self.span.start_byte(self.original)..self.span.end_byte(self.original)]
+    }
+
+    pub fn offset(&mut self, original: &'s str, len: usize) {
+        self.original = original;
+        self.span = self.span.shift(len);
+        for span in self.captured_groups.values_mut() {
+            *span = span.shift(len);
+        }
+    }
 }
 
 impl<'s> From<&RegexMatch<'s>> for HashSet<RegexMatch<'s>> {
@@ -57,16 +69,57 @@ where
         Self { regex, input }
     }
 
-    pub fn solve(self) -> HashSet<RegexMatch<'s>> {
+    pub fn solve(self) -> Vec<RegexMatch<'s>> {
         let search_space = self.gen_search_space();
-        let mut matches = HashSet::new();
-        for span in search_space {
-            let input = span.substr(self.input);
-            let initial_match = RegexMatch::new(input);
-            let res = self.regex.validate(&initial_match);
-            matches.extend(res.into_iter());
-        }
+        let mut matches: Vec<_> = search_space
+            .iter()
+            .flat_map(|span| {
+                let substr = span.substr(self.input);
+                let initial_match = RegexMatch::new(substr);
+                self.regex
+                    .validate(&initial_match)
+                    .into_iter()
+                    .map(|mut relative_match| {
+                        relative_match.offset(self.input, span.start);
+                        relative_match
+                    })
+            })
+            .collect();
+
+        self.deduplicate_matches(&mut matches);
         matches
+    }
+
+    fn deduplicate_matches(&self, matches: &mut Vec<RegexMatch<'s>>) {
+        matches.sort_by(|a, b| {
+            a.span
+                .start
+                .cmp(&b.span.start)
+                .then(b.span.end.cmp(&a.span.end))
+        });
+        matches.dedup_by(|a, b| a.span == b.span || b.span.contains(&a.span));
+    }
+
+    pub fn merge_matches(matches: &[RegexMatch<'s>]) -> Vec<SourceSpan> {
+        if matches.is_empty() {
+            return vec![];
+        }
+
+        let mut merged = Vec::new();
+        let mut current_start = matches[0].span.start;
+        let mut current_end = matches[0].span.end;
+
+        for m in &matches[1..] {
+            if m.span.start == current_end {
+                current_end = current_end.max(m.span.end);
+            } else if m.span.start > current_end {
+                merged.push(SourceSpan::new(current_start, current_end));
+                current_start = m.span.start;
+                current_end = m.span.end;
+            }
+        }
+        merged.push(SourceSpan::new(current_start, current_end));
+        merged
     }
 
     fn gen_search_space(&self) -> Vec<SourceSpan> {
@@ -147,6 +200,10 @@ impl SourceSpan {
         self.end == other.start || other.end == self.start
     }
 
+    pub fn contains(&self, other: &SourceSpan) -> bool {
+        self.start <= other.start && other.end <= self.end
+    }
+
     pub fn char_count(&self) -> usize {
         self.end - self.start
     }
@@ -155,6 +212,13 @@ impl SourceSpan {
         Self {
             start: self.start,
             end: self.end + n,
+        }
+    }
+
+    pub fn shift(&self, offset: usize) -> Self {
+        Self {
+            start: self.start + offset,
+            end: self.end + offset,
         }
     }
 }
@@ -186,5 +250,14 @@ mod tests {
         let b = SourceSpan::new(b.0, b.1);
         assert_eq!(a.is_adjacent(&b), expected);
         assert_eq!(b.is_adjacent(&a), expected);
+    }
+
+    #[test_case((0, 5), (1, 4), true; "b contained in a")]
+    #[test_case((0, 5), (6, 10), false; "disjoint distant")]
+    #[test_case((0, 5), (0, 5), true; "a contained in a")]
+    fn test_contains(a: (usize, usize), b: (usize, usize), expected: bool) {
+        let a = SourceSpan::new(a.0, a.1);
+        let b = SourceSpan::new(b.0, b.1);
+        assert_eq!(a.contains(&b), expected);
     }
 }
